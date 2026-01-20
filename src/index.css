@@ -498,6 +498,30 @@ button:disabled {
   background: linear-gradient(90deg, #646cff 0%, transparent 100%);
 }
 
+.tx-message {
+  font-size: 0.85rem;
+  font-style: italic;
+  color: #c084fc;
+}
+
+.tx-value-column {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 0.2rem;
+}
+
+.tx-block {
+  font-size: 0.75rem;
+  font-weight: bold;
+  color: #4ade80;
+}
+
+.tx-hash.mini {
+  font-size: 0.7rem;
+  opacity: 0.7;
+}
+
 .bar-l2ps {
   background: linear-gradient(90deg, #a855f7 0%, #ec4899 50%, transparent 100%);
 }

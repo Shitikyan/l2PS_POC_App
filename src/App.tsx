@@ -12,11 +12,12 @@ import type { TxPayload, L2PSEncryptedPayload } from './utils/l2ps'
 import './index.css'
 
 // Default constants
-const DEFAULT_NODE_URL = "http://127.0.0.1:53550"
-const DEFAULT_L2PS_UID = "testnet_l2ps_001"
-// Pre-filled keys for testnet_l2ps_001 (from server data)
-const DEFAULT_AES_KEY = "b9346ff30a8202cd46caa7b4b0142bfc727c99cc0f8667580af945b493038055"
-const DEFAULT_IV = "f5405674114eb2adea5774d36b701a6d"
+// Default constants
+const DEFAULT_NODE_URL = import.meta.env.VITE_NODE_URL || "http://127.0.0.1:53550"
+const DEFAULT_L2PS_UID = import.meta.env.VITE_L2PS_UID || "testnet_l2ps_001"
+// Keys should come from env or user input
+const DEFAULT_AES_KEY = import.meta.env.VITE_L2PS_AES_KEY || "b9346ff30a8202cd46caa7b4b0142bfc727c99cc0f8667580af945b493038055"
+const DEFAULT_IV = import.meta.env.VITE_L2PS_IV || "f5405674114eb2adea5774d36b701a6d"
 
 // Transaction status type
 interface TxHistoryItem {
@@ -30,6 +31,7 @@ interface TxHistoryItem {
   message?: string;
   from?: string;
   to?: string;
+  l1_block_number?: number;
 }
 
 function App() {
@@ -57,10 +59,17 @@ function App() {
   const [sending, setSending] = useState<boolean>(false)
 
   // History & L2PS Status
+  const [l1History, setL1History] = useState<TxHistoryItem[]>([])
+  const [l2psHistory, setL2psHistory] = useState<TxHistoryItem[]>([])
   const [history, setHistory] = useState<TxHistoryItem[]>([])
   const [revealedTxs, setRevealedTxs] = useState<Set<string>>(new Set())
   const [l2psMempoolInfo, setL2psMempoolInfo] = useState<any>(null)
   const [activeTab, setActiveTab] = useState<'send' | 'history'>('send')
+
+  // Combine history whenever L1 or L2PS history changes
+  useEffect(() => {
+    setHistory([...l1History, ...l2psHistory].sort((a, b) => b.timestamp - a.timestamp))
+  }, [l1History, l2psHistory])
 
   const addLog = (msg: string) => {
     setLogs(prev => [`[${new Date().toLocaleTimeString()}] ${msg}`, ...prev])
@@ -186,7 +195,7 @@ function App() {
       if (response?.result === 200 && response?.response) {
         const txsData = response.response as any
         if (txsData.transactions && Array.isArray(txsData.transactions)) {
-          // Convert to our format - this is REAL data from l2ps_transactions table
+          // Convert server data to our format
           const l2psTxs: TxHistoryItem[] = txsData.transactions.map((tx: any) => ({
             hash: tx.hash, // Primary hash (Inner/Decrypted)
             outerHash: tx.encrypted_hash, // Outer hash (Encrypted)
@@ -199,15 +208,11 @@ function App() {
                 tx.status === 'failed' ? 'failed' : 'pending',
             message: tx.execution_message || 'L2PS Transaction',
             from: tx.from,
-            to: tx.to
+            to: tx.to,
+            l1_block_number: tx.l1_block_number
           }))
 
-          // Simple: just use server data for L2PS, keep L1 transactions
-          setHistory(prev => {
-            const l1Transactions = prev.filter(t => t.type === 'l1')
-            return [...l2psTxs, ...l1Transactions].sort((a, b) => b.timestamp - a.timestamp)
-          })
-
+          setL2psHistory(l2psTxs)
           addLog(`✓ Loaded ${l2psTxs.length} L2PS transactions`)
         }
       }
@@ -216,6 +221,69 @@ function App() {
       addLog(`L2PS history error: ${e.message || 'Unknown'}`)
     }
   }, [l2psUid])
+
+  // Fetch L1 Transactions
+  const fetchL1Transactions = useCallback(async (demosInstance: Demos, addr: string) => {
+    try {
+      const cleanAddr = addr.startsWith('0x') ? addr : `0x${addr}`
+
+      const response = await demosInstance.rpcCall({
+        method: "nodeCall",
+        params: [{
+          message: "getTransactionHistory",
+          data: {
+            address: cleanAddr,
+            type: "all",
+            limit: 50
+          },
+          muid: `l1_history_${Date.now()}`
+        }]
+      }, false)
+
+      if (response?.result === 200 && Array.isArray(response?.response)) {
+        const txs: TxHistoryItem[] = response.response.map((tx: any) => {
+          // Extract data depending on tx structure
+          const content = tx.content || {};
+          // For native txs, data is often [type, payload]
+          let amount = content.amount || 0;
+
+          // Try to extract amount from native payload if not at top level
+          if (content.type === "native" && Array.isArray(content.data) && content.data[1]) {
+            const payload = content.data[1];
+            if (payload.nativeOperation === "send" && Array.isArray(payload.args)) {
+              // args: [to, amount]
+              amount = payload.args[1];
+            }
+          }
+
+          // Ensure timestamp is a valid number
+          let ts = content.timestamp;
+          if (typeof ts === 'string') {
+            ts = parseInt(ts, 10);
+          }
+          if (!ts || isNaN(ts)) {
+            ts = Date.now();
+          }
+
+          return {
+            hash: tx.hash,
+            timestamp: ts,
+            type: 'l1',
+            amount: typeof amount === 'string' ? parseFloat(amount) : amount,
+            status: 'confirmed', // Fetched from history usually means confirmed on L1
+            from: content.from,
+            to: content.to,
+            l1_block_number: typeof tx.blockNumber === 'string' ? parseInt(tx.blockNumber) : tx.blockNumber
+          }
+        });
+
+        setL1History(txs);
+        console.log(`[L1 History] Loaded ${txs.length} transactions`);
+      }
+    } catch (e: any) {
+      console.error("Failed to fetch L1 transactions", e)
+    }
+  }, [])
 
   // Check individual transaction status
   const checkTxStatus = useCallback(async (demosInstance: Demos, txHash: string): Promise<string> => {
@@ -235,23 +303,14 @@ function App() {
     if (!demos || !address) return
 
     await fetchBalance(demos, address)
+    // Always fetch L1 history
+    await fetchL1Transactions(demos, address)
 
     if (mode === 'l2ps') {
       await fetchL2PSMempoolInfo(demos)
       await fetchL2PSTransactions(demos, address)
-    } else {
-      // Update status for L1 pending transactions
-      setHistory(prev => {
-        // We use a promise inside setHistory? No, that's not allowed.
-        // We need to do the status check outside or differently.
-        return prev;
-      });
-
-      // Correct approach: fetch statuses then update
-      // But for simplicity in this POC, we'll just focus on L2PS which is fixed now.
-      // L1 status checking can be improved if needed.
     }
-  }, [demos, address, mode, fetchBalance, fetchL2PSMempoolInfo, fetchL2PSTransactions])
+  }, [demos, address, mode, fetchBalance, fetchL2PSMempoolInfo, fetchL2PSTransactions, fetchL1Transactions])
 
   // Auto-refresh every 5 seconds when connected
   useEffect(() => {
@@ -293,6 +352,7 @@ function App() {
 
       // Initial Fetch
       await fetchBalance(demosInstance, formattedAddr)
+      await fetchL1Transactions(demosInstance, formattedAddr)
       await fetchL2PSMempoolInfo(demosInstance)
       await fetchL2PSTransactions(demosInstance, formattedAddr)
 
@@ -389,6 +449,7 @@ function App() {
       // Refresh data immediately after sending
       setTimeout(async () => {
         await fetchBalance(demos, address)
+        await fetchL1Transactions(demos, address)
         if (mode === 'l2ps') {
           await fetchL2PSMempoolInfo(demos)
           await fetchL2PSTransactions(demos, address)
@@ -746,6 +807,14 @@ function App() {
                             </div>
                           )}
 
+                          {/* Message */}
+                          {tx.message && (
+                            <div className="tx-row">
+                              <span className="tx-label">Message</span>
+                              <span className="tx-message">{tx.message}</span>
+                            </div>
+                          )}
+
                           {/* Timestamp */}
                           <div className="tx-row">
                             <span className="tx-label">Time</span>
@@ -754,17 +823,24 @@ function App() {
                             </span>
                           </div>
 
-                          {/* L1 Block for confirmed L2PS */}
-                          {tx.l1BatchHash && (
+                          {/* L1 Block / Batch for confirmed L2PS */}
+                          {(tx.l1BatchHash || tx.l1_block_number) && (
                             <div className="tx-row">
-                              <span className="tx-label">L1 Batch</span>
-                              <span
-                                className="tx-hash"
-                                title={`L1 Batch: ${tx.l1BatchHash}`}
-                                onClick={(e) => { e.stopPropagation(); copyToClipboard(tx.l1BatchHash!, 'L1 batch hash') }}
-                              >
-                                {tx.l1BatchHash?.slice(0, 12)}...
-                              </span>
+                              <span className="tx-label">L1 Context</span>
+                              <div className="tx-value-column">
+                                {tx.l1_block_number && (
+                                  <span className="tx-block">Block: #{tx.l1_block_number}</span>
+                                )}
+                                {tx.l1BatchHash && (
+                                  <span
+                                    className="tx-hash mini"
+                                    title={`L1 Batch: ${tx.l1BatchHash}`}
+                                    onClick={(e) => { e.stopPropagation(); copyToClipboard(tx.l1BatchHash!, 'L1 batch hash') }}
+                                  >
+                                    Batch: {tx.l1BatchHash?.slice(0, 12)}...
+                                  </span>
+                                )}
+                              </div>
                             </div>
                           )}
                         </div>
