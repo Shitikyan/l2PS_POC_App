@@ -27,6 +27,27 @@ VITE_L2PS_AES_KEY="b9346..." # 64 hex chars
 VITE_L2PS_IV="f5405..."      # 32 hex chars
 ```
 
+### 🔑 How to generate keys?
+You can generate secure random keys using `openssl`:
+
+```bash
+# Generate 256-bit AES Key (64 hex characters)
+openssl rand -hex 32
+
+# Generate 128-bit IV (32 hex characters)
+openssl rand -hex 16
+```
+
+### ⚠️ Critical Requirement: Matching Keys
+Since L2PS uses symmetric encryption, **the keys on the Client (POC) MUST match the keys on the Node.**
+
+- **Client Keys**: Configured in `.env` or UI settings.
+- **Node Keys**: Located in `data/l2ps/<uid>/` directory on the server.
+  - Key: `data/l2ps/testnet_l2ps_001/private_key.txt`
+  - IV: `data/l2ps/testnet_l2ps_001/iv.txt`
+
+If these dont match, the node will fail to decrypt your transactions and they will be rejected.
+
 ### Why these keys?
 - **L2PS UID**: Identifies which private network you are transacting on.
 - **AES Key & IV**: Shared symmetric keys known only to participants of this specific L2PS network.
