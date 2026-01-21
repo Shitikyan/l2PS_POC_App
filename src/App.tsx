@@ -64,11 +64,33 @@ function App() {
   const [history, setHistory] = useState<TxHistoryItem[]>([])
   const [revealedTxs, setRevealedTxs] = useState<Set<string>>(new Set())
   const [l2psMempoolInfo, setL2psMempoolInfo] = useState<any>(null)
-  const [activeTab, setActiveTab] = useState<'send' | 'history'>('send')
+  const [activeTab, setActiveTab] = useState<'send' | 'history' | 'learn'>('send')
+  const [historyFilter, setHistoryFilter] = useState<'all' | 'l2ps' | 'l1'>('all')
 
-  // Combine history whenever L1 or L2PS history changes
+  // Demo states for Learn tab
+  const [demoLoading, setDemoLoading] = useState<boolean>(false)
+  const [demoResult, setDemoResult] = useState<{ type: 'success' | 'error' | 'info'; message: string } | null>(null)
+
+  // Combine history whenever L1 or L2PS history changes, deduplicate by hash
   useEffect(() => {
-    setHistory([...l1History, ...l2psHistory].sort((a, b) => b.timestamp - a.timestamp))
+    // Create a map to deduplicate - L2PS takes priority over L1
+    const txMap = new Map<string, TxHistoryItem>()
+
+    // Add L1 first (lower priority)
+    for (const tx of l1History) {
+      if (tx.hash) txMap.set(tx.hash, tx)
+    }
+
+    // Add L2PS (higher priority - will overwrite L1 if same hash)
+    for (const tx of l2psHistory) {
+      if (tx.hash) txMap.set(tx.hash, tx)
+    }
+
+    // Convert back to array and sort by timestamp descending
+    const combined = Array.from(txMap.values()).sort((a, b) => b.timestamp - a.timestamp)
+    setHistory(combined)
+
+    console.log(`[History] Combined: ${l1History.length} L1 + ${l2psHistory.length} L2PS = ${combined.length} unique`)
   }, [l1History, l2psHistory])
 
   const addLog = (msg: string) => {
@@ -282,19 +304,6 @@ function App() {
       }
     } catch (e: any) {
       console.error("Failed to fetch L1 transactions", e)
-    }
-  }, [])
-
-  // Check individual transaction status
-  const checkTxStatus = useCallback(async (demosInstance: Demos, txHash: string): Promise<string> => {
-    try {
-      const status = await demosInstance.getTxByHash(txHash)
-      if (status) {
-        return 'confirmed'
-      }
-      return 'pending'
-    } catch {
-      return 'pending'
     }
   }, [])
 
@@ -550,6 +559,12 @@ function App() {
             >
               History ({history.length})
             </button>
+            <button
+              className={`tab ${activeTab === 'learn' ? 'active' : ''}`}
+              onClick={() => setActiveTab('learn')}
+            >
+              📚 Learn
+            </button>
           </div>
 
           {activeTab === 'send' && (
@@ -612,6 +627,24 @@ function App() {
                   onChange={e => setTxCount(parseInt(e.target.value) || 1)}
                 />
 
+                {/* Fee Notice for L2PS */}
+                {mode === 'l2ps' && (
+                  <div className="fee-notice" style={{
+                    background: 'rgba(168, 85, 247, 0.1)',
+                    border: '1px solid rgba(168, 85, 247, 0.3)',
+                    borderRadius: '8px',
+                    padding: '0.75rem',
+                    marginTop: '0.5rem',
+                    fontSize: '0.85rem',
+                    display: 'flex',
+                    justifyContent: 'space-between',
+                    alignItems: 'center'
+                  }}>
+                    <span style={{ color: '#94a3b8' }}>Transaction Fee (burned)</span>
+                    <span style={{ fontWeight: 'bold', color: '#a855f7' }}>1 DEM</span>
+                  </div>
+                )}
+
                 <button
                   className="primary-btn send-btn"
                   onClick={sendTransaction}
@@ -657,212 +690,617 @@ function App() {
 
           {activeTab === 'history' && (
             <div className="card history-card">
-              {history.length === 0 ? (
-                <p className="placeholder-text">No transactions found</p>
-              ) : (
-                <div className="history-list">
-                  {history.map((tx, i) => {
-                    const isL2PS = tx.type === 'l2ps'
-                    const revealed = revealedTxs.has(tx.hash)
+              {/* History Filter Tabs */}
+              <div className="history-filter-tabs" style={{
+                display: 'flex',
+                gap: '0.5rem',
+                marginBottom: '1rem',
+                padding: '0.5rem',
+                background: 'rgba(0,0,0,0.2)',
+                borderRadius: '8px'
+              }}>
+                <button
+                  onClick={() => setHistoryFilter('all')}
+                  style={{
+                    flex: 1,
+                    padding: '0.5rem',
+                    border: 'none',
+                    borderRadius: '6px',
+                    background: historyFilter === 'all' ? 'rgba(168, 85, 247, 0.3)' : 'transparent',
+                    color: historyFilter === 'all' ? '#c084fc' : '#94a3b8',
+                    fontWeight: historyFilter === 'all' ? '600' : '400',
+                    cursor: 'pointer',
+                    transition: 'all 0.2s'
+                  }}
+                >
+                  All ({history.length})
+                </button>
+                <button
+                  onClick={() => setHistoryFilter('l2ps')}
+                  style={{
+                    flex: 1,
+                    padding: '0.5rem',
+                    border: 'none',
+                    borderRadius: '6px',
+                    background: historyFilter === 'l2ps' ? 'rgba(168, 85, 247, 0.3)' : 'transparent',
+                    color: historyFilter === 'l2ps' ? '#c084fc' : '#94a3b8',
+                    fontWeight: historyFilter === 'l2ps' ? '600' : '400',
+                    cursor: 'pointer',
+                    transition: 'all 0.2s'
+                  }}
+                >
+                  🔒 L2PS ({l2psHistory.length})
+                </button>
+                <button
+                  onClick={() => setHistoryFilter('l1')}
+                  style={{
+                    flex: 1,
+                    padding: '0.5rem',
+                    border: 'none',
+                    borderRadius: '6px',
+                    background: historyFilter === 'l1' ? 'rgba(100, 108, 255, 0.3)' : 'transparent',
+                    color: historyFilter === 'l1' ? '#8b93ff' : '#94a3b8',
+                    fontWeight: historyFilter === 'l1' ? '600' : '400',
+                    cursor: 'pointer',
+                    transition: 'all 0.2s'
+                  }}
+                >
+                  📤 L1 ({l1History.length})
+                </button>
+              </div>
 
-                    const toggleRevealed = () => {
-                      if (isL2PS) {
-                        setRevealedTxs(prev => {
-                          const next = new Set(prev)
-                          if (next.has(tx.hash)) {
-                            next.delete(tx.hash)
-                          } else {
-                            next.add(tx.hash)
-                          }
-                          return next
-                        })
+              {/* Filtered History */}
+              {(() => {
+                const filteredHistory = historyFilter === 'all'
+                  ? history
+                  : historyFilter === 'l2ps'
+                    ? l2psHistory.sort((a, b) => b.timestamp - a.timestamp)
+                    : l1History.sort((a, b) => b.timestamp - a.timestamp)
+
+                if (filteredHistory.length === 0) {
+                  return <p className="placeholder-text">No {historyFilter === 'all' ? '' : historyFilter.toUpperCase() + ' '}transactions found</p>
+                }
+
+                return (
+                  <div className="history-list">
+                    {filteredHistory.map((tx, i) => {
+                      const isL2PS = tx.type === 'l2ps'
+                      const revealed = revealedTxs.has(tx.hash)
+
+                      const toggleRevealed = () => {
+                        if (isL2PS) {
+                          setRevealedTxs(prev => {
+                            const next = new Set(prev)
+                            if (next.has(tx.hash)) {
+                              next.delete(tx.hash)
+                            } else {
+                              next.add(tx.hash)
+                            }
+                            return next
+                          })
+                        }
                       }
-                    }
 
-                    const copyToClipboard = (text: string, label: string) => {
-                      navigator.clipboard.writeText(text)
-                      addLog(`📋 Copied ${label}`)
-                    }
+                      const copyToClipboard = (text: string, label: string) => {
+                        navigator.clipboard.writeText(text)
+                        addLog(`📋 Copied ${label}`)
+                      }
 
-                    return (
-                      <div
-                        key={tx.hash || i}
-                        className={`tx-card ${isL2PS ? 'tx-l2ps' : 'tx-l1'} ${isL2PS && !revealed ? 'tx-blurred' : ''}`}
-                      >
-                        {/* Header Row */}
-                        <div className="tx-header">
-                          <div
-                            className={`tx-type-badge ${isL2PS ? 'clickable' : ''}`}
-                            title={isL2PS ? (revealed ? 'Click to hide details' : 'Click to reveal details') : 'L1 Public Transaction'}
-                            onClick={isL2PS ? toggleRevealed : undefined}
-                            style={isL2PS ? { cursor: 'pointer' } : undefined}
-                          >
-                            {isL2PS ? (revealed ? '🔓 L2PS' : '🔒 L2PS') : '📤 L1'}
-                          </div>
-                          <div
-                            className="tx-status"
-                            style={{ color: getStatusColor(tx.status) }}
-                            title={`Status: ${tx.status}`}
-                          >
-                            {getStatusLabel(tx.status)}
-                          </div>
-                        </div>
-
-                        {/* Transaction Details */}
-                        <div className={`tx-body ${isL2PS && !revealed ? 'blurred' : ''}`}>
-                          {/* Hash Row */}
-                          <div className="tx-row">
-                            <span className="tx-label">{isL2PS ? 'Inner Hash' : 'Hash'}</span>
-                            <div className="tx-value-group">
-                              <span
-                                className="tx-hash"
-                                title={`Click to copy: ${tx.hash}`}
-                                onClick={(e) => { e.stopPropagation(); copyToClipboard(tx.hash, 'hash') }}
-                              >
-                                {tx.hash?.slice(0, 20)}...{tx.hash?.slice(-8)}
-                              </span>
-                              <button
-                                className="copy-btn"
-                                onClick={(e) => { e.stopPropagation(); copyToClipboard(tx.hash, 'hash') }}
-                                title="Copy full hash"
-                              >
-                                📋
-                              </button>
+                      return (
+                        <div
+                          key={tx.hash || i}
+                          className={`tx-card ${isL2PS ? 'tx-l2ps' : 'tx-l1'} ${isL2PS && !revealed ? 'tx-blurred' : ''}`}
+                        >
+                          {/* Header Row */}
+                          <div className="tx-header">
+                            <div
+                              className={`tx-type-badge ${isL2PS ? 'clickable' : ''}`}
+                              title={isL2PS ? (revealed ? 'Click to hide details' : 'Click to reveal details') : 'L1 Public Transaction'}
+                              onClick={isL2PS ? toggleRevealed : undefined}
+                              style={isL2PS ? { cursor: 'pointer' } : undefined}
+                            >
+                              {isL2PS ? (revealed ? '🔓 L2PS' : '🔒 L2PS') : '📤 L1'}
+                            </div>
+                            <div
+                              className="tx-status"
+                              style={{ color: getStatusColor(tx.status) }}
+                              title={`Status: ${tx.status}`}
+                            >
+                              {getStatusLabel(tx.status)}
                             </div>
                           </div>
 
-                          {/* Outer Hash for L2PS */}
-                          {tx.outerHash && (
+                          {/* Transaction Details */}
+                          <div className={`tx-body ${isL2PS && !revealed ? 'blurred' : ''}`}>
+                            {/* Hash Row */}
                             <div className="tx-row">
-                              <span className="tx-label">Outer Hash</span>
+                              <span className="tx-label">{isL2PS ? 'Inner Hash' : 'Hash'}</span>
                               <div className="tx-value-group">
                                 <span
-                                  className="tx-hash encrypted"
-                                  title={`Outer encrypted hash: ${tx.outerHash}`}
-                                  onClick={(e) => { e.stopPropagation(); copyToClipboard(tx.outerHash!, 'outer hash') }}
+                                  className="tx-hash"
+                                  title={`Click to copy: ${tx.hash}`}
+                                  onClick={(e) => { e.stopPropagation(); copyToClipboard(tx.hash, 'hash') }}
                                 >
-                                  {tx.outerHash?.slice(0, 16)}...
+                                  {tx.hash?.slice(0, 20)}...{tx.hash?.slice(-8)}
                                 </span>
                                 <button
                                   className="copy-btn"
-                                  onClick={(e) => { e.stopPropagation(); copyToClipboard(tx.outerHash!, 'outer hash') }}
-                                  title="Copy outer hash"
+                                  onClick={(e) => { e.stopPropagation(); copyToClipboard(tx.hash, 'hash') }}
+                                  title="Copy full hash"
                                 >
                                   📋
                                 </button>
                               </div>
                             </div>
-                          )}
 
-                          {/* Amount */}
-                          {tx.amount !== undefined && tx.amount > 0 && (
-                            <div className="tx-row">
-                              <span className="tx-label">Amount</span>
-                              <span className="tx-amount">{tx.amount.toLocaleString()} DMS</span>
-                            </div>
-                          )}
-
-                          {/* From/To for L2PS */}
-                          {isL2PS && tx.from && (
-                            <div className="tx-row">
-                              <span className="tx-label">From</span>
-                              <div className="tx-value-group">
-                                <span
-                                  className="tx-address"
-                                  onClick={(e) => { e.stopPropagation(); copyToClipboard(tx.from!, 'sender') }}
-                                  title={tx.from}
-                                >
-                                  {tx.from?.slice(0, 12)}...{tx.from?.slice(-6)}
-                                </span>
-                                <button
-                                  className="copy-btn"
-                                  onClick={(e) => { e.stopPropagation(); copyToClipboard(tx.from!, 'sender') }}
-                                  title="Copy sender address"
-                                >
-                                  📋
-                                </button>
-                              </div>
-                            </div>
-                          )}
-
-                          {isL2PS && tx.to && (
-                            <div className="tx-row">
-                              <span className="tx-label">To</span>
-                              <div className="tx-value-group">
-                                <span
-                                  className="tx-address"
-                                  onClick={(e) => { e.stopPropagation(); copyToClipboard(tx.to!, 'recipient') }}
-                                  title={tx.to}
-                                >
-                                  {tx.to?.slice(0, 12)}...{tx.to?.slice(-6)}
-                                </span>
-                                <button
-                                  className="copy-btn"
-                                  onClick={(e) => { e.stopPropagation(); copyToClipboard(tx.to!, 'recipient') }}
-                                  title="Copy recipient address"
-                                >
-                                  📋
-                                </button>
-                              </div>
-                            </div>
-                          )}
-
-                          {/* Message */}
-                          {tx.message && (
-                            <div className="tx-row">
-                              <span className="tx-label">Message</span>
-                              <span className="tx-message">{tx.message}</span>
-                            </div>
-                          )}
-
-                          {/* Timestamp */}
-                          <div className="tx-row">
-                            <span className="tx-label">Time</span>
-                            <span className="tx-time" title={new Date(tx.timestamp).toISOString()}>
-                              {new Date(tx.timestamp).toLocaleString()}
-                            </span>
-                          </div>
-
-                          {/* L1 Block / Batch for confirmed L2PS */}
-                          {(tx.l1BatchHash || tx.l1_block_number) && (
-                            <div className="tx-row">
-                              <span className="tx-label">L1 Context</span>
-                              <div className="tx-value-column">
-                                {tx.l1_block_number && (
-                                  <span className="tx-block">Block: #{tx.l1_block_number}</span>
-                                )}
-                                {tx.l1BatchHash && (
+                            {/* Outer Hash for L2PS */}
+                            {tx.outerHash && (
+                              <div className="tx-row">
+                                <span className="tx-label">Outer Hash</span>
+                                <div className="tx-value-group">
                                   <span
-                                    className="tx-hash mini"
-                                    title={`L1 Batch: ${tx.l1BatchHash}`}
-                                    onClick={(e) => { e.stopPropagation(); copyToClipboard(tx.l1BatchHash!, 'L1 batch hash') }}
+                                    className="tx-hash encrypted"
+                                    title={`Outer encrypted hash: ${tx.outerHash}`}
+                                    onClick={(e) => { e.stopPropagation(); copyToClipboard(tx.outerHash!, 'outer hash') }}
                                   >
-                                    Batch: {tx.l1BatchHash?.slice(0, 12)}...
+                                    {tx.outerHash?.slice(0, 16)}...
                                   </span>
-                                )}
+                                  <button
+                                    className="copy-btn"
+                                    onClick={(e) => { e.stopPropagation(); copyToClipboard(tx.outerHash!, 'outer hash') }}
+                                    title="Copy outer hash"
+                                  >
+                                    📋
+                                  </button>
+                                </div>
                               </div>
+                            )}
+
+                            {/* Amount */}
+                            {tx.amount !== undefined && tx.amount > 0 && (
+                              <div className="tx-row">
+                                <span className="tx-label">Amount</span>
+                                <span className="tx-amount">{tx.amount.toLocaleString()} DMS</span>
+                              </div>
+                            )}
+
+                            {/* From/To for L2PS */}
+                            {isL2PS && tx.from && (
+                              <div className="tx-row">
+                                <span className="tx-label">From</span>
+                                <div className="tx-value-group">
+                                  <span
+                                    className="tx-address"
+                                    onClick={(e) => { e.stopPropagation(); copyToClipboard(tx.from!, 'sender') }}
+                                    title={tx.from}
+                                  >
+                                    {tx.from?.slice(0, 12)}...{tx.from?.slice(-6)}
+                                  </span>
+                                  <button
+                                    className="copy-btn"
+                                    onClick={(e) => { e.stopPropagation(); copyToClipboard(tx.from!, 'sender') }}
+                                    title="Copy sender address"
+                                  >
+                                    📋
+                                  </button>
+                                </div>
+                              </div>
+                            )}
+
+                            {isL2PS && tx.to && (
+                              <div className="tx-row">
+                                <span className="tx-label">To</span>
+                                <div className="tx-value-group">
+                                  <span
+                                    className="tx-address"
+                                    onClick={(e) => { e.stopPropagation(); copyToClipboard(tx.to!, 'recipient') }}
+                                    title={tx.to}
+                                  >
+                                    {tx.to?.slice(0, 12)}...{tx.to?.slice(-6)}
+                                  </span>
+                                  <button
+                                    className="copy-btn"
+                                    onClick={(e) => { e.stopPropagation(); copyToClipboard(tx.to!, 'recipient') }}
+                                    title="Copy recipient address"
+                                  >
+                                    📋
+                                  </button>
+                                </div>
+                              </div>
+                            )}
+
+                            {/* Message */}
+                            {tx.message && (
+                              <div className="tx-row">
+                                <span className="tx-label">Message</span>
+                                <span className="tx-message">{tx.message}</span>
+                              </div>
+                            )}
+
+                            {/* Timestamp */}
+                            <div className="tx-row">
+                              <span className="tx-label">Time</span>
+                              <span className="tx-time" title={new Date(tx.timestamp).toISOString()}>
+                                {new Date(tx.timestamp).toLocaleString()}
+                              </span>
+                            </div>
+
+                            {/* L1 Block / Batch for confirmed L2PS */}
+                            {(tx.l1BatchHash || tx.l1_block_number) && (
+                              <div className="tx-row">
+                                <span className="tx-label">L1 Context</span>
+                                <div className="tx-value-column">
+                                  {tx.l1_block_number && (
+                                    <span className="tx-block">Block: #{tx.l1_block_number}</span>
+                                  )}
+                                  {tx.l1BatchHash && (
+                                    <span
+                                      className="tx-hash mini"
+                                      title={`L1 Batch: ${tx.l1BatchHash}`}
+                                      onClick={(e) => { e.stopPropagation(); copyToClipboard(tx.l1BatchHash!, 'L1 batch hash') }}
+                                    >
+                                      Batch: {tx.l1BatchHash?.slice(0, 12)}...
+                                    </span>
+                                  )}
+                                </div>
+                              </div>
+                            )}
+                          </div>
+
+                          {/* Privacy Notice / Toggle Button */}
+                          {isL2PS && (
+                            <div
+                              className="tx-privacy-notice"
+                              onClick={toggleRevealed}
+                              style={{ cursor: 'pointer' }}
+                            >
+                              {revealed ? '🔒 Click to hide details' : '🔐 Click to reveal private transaction details'}
                             </div>
                           )}
+
+                          {/* Type indicator bar */}
+                          <div className={`tx-type-bar ${isL2PS ? 'bar-l2ps' : 'bar-l1'}`}></div>
                         </div>
+                      )
+                    })}
+                  </div>
+                )
+              })()}
+            </div>
+          )}
 
-                        {/* Privacy Notice / Toggle Button */}
-                        {isL2PS && (
-                          <div
-                            className="tx-privacy-notice"
-                            onClick={toggleRevealed}
-                            style={{ cursor: 'pointer' }}
-                          >
-                            {revealed ? '🔒 Click to hide details' : '🔐 Click to reveal private transaction details'}
-                          </div>
-                        )}
+          {/* LEARN TAB - Educational Content */}
+          {activeTab === 'learn' && (
+            <div className="card learn-card">
+              <h2 style={{ marginBottom: '1.5rem', color: '#a855f7' }}>🎓 How L2PS Works</h2>
 
-                        {/* Type indicator bar */}
-                        <div className={`tx-type-bar ${isL2PS ? 'bar-l2ps' : 'bar-l1'}`}></div>
-                      </div>
-                    )
-                  })}
+              {/* Section 1: What is L2PS */}
+              <div className="learn-section">
+                <h3>🔐 What is L2PS?</h3>
+                <p>
+                  <strong>Layer 2 Privacy Subnet</strong> is a private transaction layer that runs on top of the public L1 blockchain.
+                </p>
+                <div className="learn-box">
+                  <div className="learn-comparison">
+                    <div className="comparison-item l1-item">
+                      <span className="comparison-title">L1 (Public)</span>
+                      <span>Alice → Bob: 5 DEM</span>
+                      <span className="comparison-note">Everyone sees this</span>
+                    </div>
+                    <div className="comparison-arrow">→</div>
+                    <div className="comparison-item l2ps-item">
+                      <span className="comparison-title">L2PS (Private)</span>
+                      <span>Alice → [encrypted blob]</span>
+                      <span className="comparison-note">Only participants know</span>
+                    </div>
+                  </div>
                 </div>
-              )}
+              </div>
+
+              {/* Section 2: Transaction Flow */}
+              <div className="learn-section">
+                <h3>📦 Transaction Lifecycle</h3>
+                <div className="learn-timeline">
+                  <div className="timeline-step">
+                    <span className="step-number">1</span>
+                    <div className="step-content">
+                      <strong>Encrypt</strong>
+                      <span>Your browser encrypts the tx with AES-256</span>
+                    </div>
+                  </div>
+                  <div className="timeline-step">
+                    <span className="step-number">2</span>
+                    <div className="step-content">
+                      <strong>Submit</strong>
+                      <span>Encrypted blob sent to L2PS node</span>
+                    </div>
+                  </div>
+                  <div className="timeline-step">
+                    <span className="step-number">3</span>
+                    <div className="step-content">
+                      <strong>Execute</strong>
+                      <span>Node decrypts & validates (status: ⚡ Executed)</span>
+                    </div>
+                  </div>
+                  <div className="timeline-step">
+                    <span className="step-number">4</span>
+                    <div className="step-content">
+                      <strong>Batch</strong>
+                      <span>Every 10s, up to 10 txs bundled (status: 📦 Batched)</span>
+                    </div>
+                  </div>
+                  <div className="timeline-step">
+                    <span className="step-number">5</span>
+                    <div className="step-content">
+                      <strong>Confirm</strong>
+                      <span>Batch included in L1 block (status: ✓ Confirmed)</span>
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              {/* Section 3: Fee Info */}
+              <div className="learn-section">
+                <h3>💰 Transaction Fees</h3>
+                <div className="learn-box fee-box">
+                  <div className="fee-item">
+                    <span className="fee-label">L2PS Transaction Fee</span>
+                    <span className="fee-value">1 DEM</span>
+                  </div>
+                  <p className="fee-note">
+                    Each L2PS transaction costs <strong>1 DEM</strong> which is burned (removed from circulation).
+                    This is in addition to the transfer amount.
+                  </p>
+                </div>
+              </div>
+
+              {/* Section 4: Privacy Demo - Interactive */}
+              <div className="learn-section">
+                <h3>🔒 Privacy Demo: Access Control</h3>
+                <p>Try to fetch L2PS transaction history and see what happens with or without signing:</p>
+                <div className="learn-demo">
+
+                  {/* Initial state: Show fetch button */}
+                  {!demoResult && !demoLoading && (
+                    <button
+                      className="demo-btn"
+                      onClick={() => {
+                        if (!demos) return
+                        setDemoResult({ type: 'info', message: 'CHOICE_MODAL' })
+                      }}
+                      disabled={!demos}
+                      style={{
+                        background: 'linear-gradient(135deg, #a855f7, #8b5cf6)',
+                      }}
+                    >
+                      🔍 Fetch L2PS History
+                    </button>
+                  )}
+
+                  {/* Choice Modal */}
+                  {demoResult?.message === 'CHOICE_MODAL' && (
+                    <div style={{
+                      background: 'rgba(0, 0, 0, 0.4)',
+                      borderRadius: '12px',
+                      padding: '1.5rem',
+                      border: '1px solid rgba(168, 85, 247, 0.3)',
+                      animation: 'fadeIn 0.3s ease-in'
+                    }}>
+                      <p style={{ marginBottom: '1rem', textAlign: 'center', fontWeight: '600' }}>
+                        🔐 Authentication Required
+                      </p>
+                      <p style={{ marginBottom: '1.5rem', fontSize: '0.9rem', textAlign: 'center', color: '#94a3b8' }}>
+                        The node requires you to prove you own the address. Sign the request?
+                      </p>
+                      <div style={{ display: 'flex', gap: '1rem' }}>
+                        {/* Skip signing button */}
+                        <button
+                          className="demo-btn"
+                          onClick={async () => {
+                            setDemoLoading(true)
+                            setDemoResult(null)
+                            addLog("🧪 Attempting access WITHOUT signing...")
+                            try {
+                              const timestamp = Date.now().toString()
+                              const response = await demos!.rpcCall({
+                                method: "nodeCall",
+                                params: [{
+                                  message: "getL2PSAccountTransactions",
+                                  data: {
+                                    l2psUid: l2psUid,
+                                    address: address,
+                                    timestamp: timestamp,
+                                    signature: "not_signed",
+                                    limit: 10
+                                  },
+                                  muid: `demo_no_sign_${Date.now()}`
+                                }]
+                              }, false)
+
+                              if (response?.result === 403) {
+                                setDemoResult({ type: 'error', message: '🛡️ ACCESS DENIED (403): Cannot prove address ownership without signature!' })
+                                addLog("🛡️ ACCESS DENIED (403)")
+                              } else if (response?.result === 401) {
+                                setDemoResult({ type: 'error', message: '🛡️ AUTH REQUIRED (401): Missing valid signature!' })
+                                addLog("🛡️ AUTH REQUIRED (401)")
+                              } else {
+                                setDemoResult({ type: 'info', message: `Unexpected: ${response?.result}` })
+                              }
+                            } catch (e: any) {
+                              setDemoResult({ type: 'error', message: `Error: ${e.message}` })
+                            } finally {
+                              setDemoLoading(false)
+                            }
+                          }}
+                          style={{
+                            flex: 1,
+                            background: 'linear-gradient(135deg, #ef4444, #dc2626)',
+                          }}
+                        >
+                          ❌ Skip Signing
+                        </button>
+
+                        {/* Sign button */}
+                        <button
+                          className="demo-btn"
+                          onClick={async () => {
+                            setDemoLoading(true)
+                            setDemoResult(null)
+                            addLog("✍️ Signing authentication request...")
+                            try {
+                              const timestamp = Date.now().toString()
+                              const messageToSign = `getL2PSHistory:${address}:${timestamp}`
+
+                              addLog(`📝 Message: ${messageToSign.slice(0, 35)}...`)
+
+                              const signResult = await demos!.signMessage(messageToSign)
+                              const signature = typeof signResult === 'string' ? signResult : signResult.data
+
+                              addLog("✅ Signed! Sending request...")
+
+                              const response = await demos!.rpcCall({
+                                method: "nodeCall",
+                                params: [{
+                                  message: "getL2PSAccountTransactions",
+                                  data: {
+                                    l2psUid: l2psUid,
+                                    address: address,
+                                    timestamp: timestamp,
+                                    signature: signature,
+                                    limit: 10
+                                  },
+                                  muid: `demo_signed_${Date.now()}`
+                                }]
+                              }, false)
+
+                              if (response?.result === 200) {
+                                const txCount = response?.response?.transactions?.length || 0
+                                setDemoResult({
+                                  type: 'success',
+                                  message: `✅ ACCESS GRANTED! Found ${txCount} L2PS transactions.`
+                                })
+                                addLog(`✅ SUCCESS! Found ${txCount} transactions`)
+                              } else {
+                                setDemoResult({ type: 'error', message: `Response: ${response?.result}` })
+                              }
+                            } catch (e: any) {
+                              setDemoResult({ type: 'error', message: `Error: ${e.message}` })
+                            } finally {
+                              setDemoLoading(false)
+                            }
+                          }}
+                          style={{
+                            flex: 1,
+                            background: 'linear-gradient(135deg, #4ade80, #22c55e)',
+                          }}
+                        >
+                          ✍️ Sign Request
+                        </button>
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Loading state */}
+                  {demoLoading && (
+                    <div style={{
+                      padding: '2rem',
+                      textAlign: 'center',
+                      animation: 'pulse 1s infinite'
+                    }}>
+                      ⏳ Processing...
+                    </div>
+                  )}
+
+                  {/* Result Display */}
+                  {demoResult && demoResult.message !== 'CHOICE_MODAL' && !demoLoading && (
+                    <div style={{ animation: 'fadeIn 0.3s ease-in' }}>
+                      <div
+                        style={{
+                          padding: '1.25rem',
+                          borderRadius: '8px',
+                          background: demoResult.type === 'error'
+                            ? 'rgba(239, 68, 68, 0.2)'
+                            : demoResult.type === 'success'
+                              ? 'rgba(74, 222, 128, 0.2)'
+                              : 'rgba(100, 108, 255, 0.2)',
+                          border: `1px solid ${demoResult.type === 'error'
+                            ? 'rgba(239, 68, 68, 0.5)'
+                            : demoResult.type === 'success'
+                              ? 'rgba(74, 222, 128, 0.5)'
+                              : 'rgba(100, 108, 255, 0.5)'
+                            }`,
+                          marginBottom: '1rem'
+                        }}
+                      >
+                        <span style={{ fontSize: '1rem', fontWeight: '600' }}>
+                          {demoResult.message}
+                        </span>
+                      </div>
+                      <button
+                        onClick={() => setDemoResult(null)}
+                        style={{
+                          background: 'rgba(255,255,255,0.1)',
+                          border: '1px solid rgba(255,255,255,0.2)',
+                          padding: '0.5rem 1rem',
+                          fontSize: '0.85rem',
+                          width: '100%'
+                        }}
+                      >
+                        🔄 Try Again
+                      </button>
+                    </div>
+                  )}
+
+                  <p className="demo-explanation" style={{ marginTop: '1.5rem' }}>
+                    <strong>How it works:</strong> L2PS history requires cryptographic proof of address ownership.
+                    Without a valid signature, the node rejects the request (403).
+                  </p>
+                </div>
+              </div>
+
+              {/* Section 5: Encryption Demo */}
+              <div className="learn-section">
+                <h3>🔓 Decryption Demo</h3>
+                <p>See what an encrypted L2PS transaction looks like vs decrypted:</p>
+                <div className="learn-demo">
+                  <div className="demo-comparison">
+                    <div className="demo-box encrypted">
+                      <span className="demo-label">Encrypted (What network sees)</span>
+                      <code>
+                        {`{
+  "type": "l2psEncryptedTx",
+  "to": "${l2psUid}",
+  "data": "aGVsbG8gd29ybGQh..."
+}`}
+                      </code>
+                    </div>
+                    <div className="demo-arrow">🔓</div>
+                    <div className="demo-box decrypted">
+                      <span className="demo-label">Decrypted (Only participants see)</span>
+                      <code>
+                        {`{
+  "type": "native",
+  "from": "${address.slice(0, 16)}...",
+  "to": "0xRecipient...",
+  "amount": 5
+}`}
+                      </code>
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              {/* Section 6: Key Points */}
+              <div className="learn-section">
+                <h3>💡 Key Takeaways</h3>
+                <ul className="learn-list">
+                  <li>✅ <strong>Client-side encryption</strong> - Node never sees plaintext</li>
+                  <li>✅ <strong>Signature verification</strong> - Only you can access your history</li>
+                  <li>✅ <strong>Batch aggregation</strong> - Multiple txs → 1 L1 transaction</li>
+                  <li>✅ <strong>ZK Proofs</strong> - Validators verify without seeing content</li>
+                  <li>✅ <strong>1 DEM fee</strong> - Same cost as public transactions</li>
+                </ul>
+              </div>
             </div>
           )}
 

@@ -537,3 +537,280 @@ button:disabled {
   font-style: italic;
   padding: 2rem;
 }
+
+/* ===== LEARN TAB STYLES ===== */
+.learn-card {
+  text-align: left;
+}
+
+.learn-card h2 {
+  text-align: center;
+  font-size: 1.8rem;
+}
+
+.learn-card h3 {
+  color: #c084fc;
+  margin-bottom: 0.75rem;
+  font-size: 1.1rem;
+}
+
+.learn-section {
+  margin-bottom: 2rem;
+  padding-bottom: 1.5rem;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+}
+
+.learn-section:last-child {
+  border-bottom: none;
+}
+
+.learn-section p {
+  color: #94a3b8;
+  line-height: 1.6;
+  margin-bottom: 1rem;
+}
+
+.learn-box {
+  background: rgba(0, 0, 0, 0.3);
+  border-radius: 12px;
+  padding: 1.25rem;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+}
+
+/* Comparison (L1 vs L2PS) */
+.learn-comparison {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+}
+
+.comparison-item {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+  padding: 1rem;
+  border-radius: 8px;
+  text-align: center;
+}
+
+.l1-item {
+  background: rgba(100, 108, 255, 0.15);
+  border: 1px solid rgba(100, 108, 255, 0.3);
+}
+
+.l2ps-item {
+  background: rgba(168, 85, 247, 0.15);
+  border: 1px solid rgba(168, 85, 247, 0.3);
+}
+
+.comparison-title {
+  font-weight: 700;
+  font-size: 0.9rem;
+}
+
+.comparison-note {
+  font-size: 0.75rem;
+  opacity: 0.6;
+}
+
+.comparison-arrow {
+  font-size: 1.5rem;
+  opacity: 0.5;
+}
+
+/* Timeline */
+.learn-timeline {
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+}
+
+.timeline-step {
+  display: flex;
+  align-items: flex-start;
+  gap: 1rem;
+}
+
+.step-number {
+  width: 28px;
+  height: 28px;
+  border-radius: 50%;
+  background: linear-gradient(135deg, #a855f7, #ec4899);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-weight: 700;
+  font-size: 0.85rem;
+  flex-shrink: 0;
+}
+
+.step-content {
+  display: flex;
+  flex-direction: column;
+  gap: 0.2rem;
+}
+
+.step-content strong {
+  color: white;
+}
+
+.step-content span {
+  font-size: 0.85rem;
+  color: #94a3b8;
+}
+
+/* Fee Box */
+.fee-box {
+  text-align: center;
+}
+
+.fee-item {
+  display: flex;
+  justify-content: center;
+  align-items: baseline;
+  gap: 1rem;
+  margin-bottom: 1rem;
+}
+
+.fee-label {
+  font-size: 0.9rem;
+  color: #94a3b8;
+}
+
+.fee-value {
+  font-size: 2rem;
+  font-weight: 700;
+  color: #4ade80;
+}
+
+.fee-note {
+  font-size: 0.85rem;
+  color: #64748b;
+  margin: 0;
+}
+
+/* Demo Section */
+.learn-demo {
+  margin-top: 1rem;
+}
+
+.demo-btn {
+  background: linear-gradient(135deg, #ef4444, #dc2626);
+  color: white;
+  padding: 0.75rem 1.5rem;
+  font-size: 1rem;
+  border: none;
+  width: auto;
+  margin-bottom: 1rem;
+}
+
+.demo-btn:hover {
+  background: linear-gradient(135deg, #dc2626, #b91c1c);
+  transform: scale(1.02);
+}
+
+.demo-btn:disabled {
+  opacity: 0.5;
+}
+
+.demo-explanation {
+  font-size: 0.85rem;
+  color: #94a3b8;
+  background: rgba(239, 68, 68, 0.1);
+  padding: 0.75rem;
+  border-radius: 8px;
+  border-left: 3px solid #ef4444;
+}
+
+/* Demo Comparison */
+.demo-comparison {
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+  flex-wrap: wrap;
+}
+
+.demo-box {
+  flex: 1;
+  min-width: 200px;
+  padding: 1rem;
+  border-radius: 8px;
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+
+.demo-box.encrypted {
+  background: rgba(239, 68, 68, 0.1);
+  border: 1px solid rgba(239, 68, 68, 0.3);
+}
+
+.demo-box.decrypted {
+  background: rgba(74, 222, 128, 0.1);
+  border: 1px solid rgba(74, 222, 128, 0.3);
+}
+
+.demo-label {
+  font-size: 0.75rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+.demo-box code {
+  font-size: 0.75rem;
+  background: rgba(0, 0, 0, 0.3);
+  padding: 0.5rem;
+  border-radius: 4px;
+  white-space: pre-wrap;
+  word-break: break-all;
+}
+
+.demo-arrow {
+  font-size: 2rem;
+}
+
+/* Learn List */
+.learn-list {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+}
+
+.learn-list li {
+  padding: 0.75rem 1rem;
+  background: rgba(74, 222, 128, 0.1);
+  border-radius: 8px;
+  border-left: 3px solid #4ade80;
+  font-size: 0.9rem;
+}
+
+/* Animations */
+@keyframes fadeIn {
+  from {
+    opacity: 0;
+    transform: translateY(-10px);
+  }
+
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes pulse {
+
+  0%,
+  100% {
+    opacity: 1;
+  }
+
+  50% {
+    opacity: 0.5;
+  }
+}
