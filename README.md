@@ -1,8 +1,8 @@
-# L2PS Wallet Connect POC
+# L2PS Wallet POC Application
 
-A React + Vite + TypeScript application for testing L2PS (Layer 2 Privacy Subnets) transaction flows and comparing them with standard L1 transactions.
+A React + Vite + TypeScript application for demonstrating L2PS (Layer 2 Privacy Subnets) capabilities. This POC showcases private transaction flows, authenticated history access, and the rollup mechanism.
 
-## Quick Start
+## 🚀 Quick Start
 
 ```bash
 cd docs/poc-app
@@ -11,132 +11,239 @@ npm run dev
 # Open http://localhost:5173
 ```
 
+**Prerequisites**: Node.js 18+, running Demos node with L2PS configured.
+
+---
+
+## 📋 Features Overview
+
+| Feature | Description |
+|---------|-------------|
+| **Wallet Connection** | BIP39 mnemonic → Ed25519 keypair |
+| **Dual Transaction Modes** | L1 (public) and L2PS (private) |
+| **Client-Side Encryption** | AES-256 encryption in browser |
+| **Authenticated History** | Signature-verified L2PS history access |
+| **Interactive Learn Tab** | Educational demos and explanations |
+| **Filter Tabs** | View All, L2PS only, or L1 only transactions |
+
+---
+
 ## 🔐 1. Keys Handling & Environment
 
-L2PS transactions are **encrypted client-side** before they ever leave the wallet. This is why the POC needs `AES Key` and `IV`.
+L2PS transactions are **encrypted client-side** before leaving the wallet. The POC requires `AES Key` and `IV` that match the node configuration.
 
-### Configuration
-Keys can be configured via `.env` file or directly in the UI ("Advanced Settings").
+### Configuration Options
 
-**Recommended `.env` setup:**
+**Option A: Environment Variables (Recommended)**
+
+Create `.env` in `docs/poc-app/`:
 ```bash
-# .env in docs/poc-app/
 VITE_NODE_URL="http://127.0.0.1:53550"
 VITE_L2PS_UID="testnet_l2ps_001"
-VITE_L2PS_AES_KEY="b9346..." # 64 hex chars
-VITE_L2PS_IV="f5405..."      # 32 hex chars
+VITE_L2PS_AES_KEY="b9346ff30a8202cd46caa7b4b0142bfc727c99cc0f8667580af945b493038055"
+VITE_L2PS_IV="f5405674114eb2adea5774d36b701a6d"
 ```
 
-### 🔑 How to generate keys?
-You can generate secure random keys using `openssl`:
+**Option B: UI Settings**
+
+Click "Advanced Settings" in the Send tab to configure keys at runtime.
+
+### 🔑 Generating Keys
 
 ```bash
 # Generate 256-bit AES Key (64 hex characters)
 openssl rand -hex 32
 
-# Generate 128-bit IV (32 hex characters)
+# Generate 128-bit IV (32 hex characters)  
 openssl rand -hex 16
 ```
 
-### ⚠️ Critical Requirement: Matching Keys
-Since L2PS uses symmetric encryption, **the keys on the Client (POC) MUST match the keys on the Node.**
+### ⚠️ Critical: Matching Keys
 
-- **Client Keys**: Configured in `.env` or UI settings.
-- **Node Keys**: Located in `data/l2ps/<uid>/` directory on the server.
-  - Key: `data/l2ps/testnet_l2ps_001/private_key.txt`
-  - IV: `data/l2ps/testnet_l2ps_001/iv.txt`
+**Client and Node keys MUST match!**
 
-If these dont match, the node will fail to decrypt your transactions and they will be rejected.
+| Location | Files |
+|----------|-------|
+| **Client (POC)** | `.env` or UI settings |
+| **Node** | `data/l2ps/<uid>/private_key.txt` and `iv.txt` |
 
-### Why these keys?
-- **L2PS UID**: Identifies which private network you are transacting on.
-- **AES Key & IV**: Shared symmetric keys known only to participants of this specific L2PS network.
-- **Security Note**: In a real wallet, these would be securely imported via a QR code or secure channel, never hardcoded.
+If keys don't match, transactions will fail decryption on the node.
 
 ---
 
-## 🔌 2. Connection Interface
+## 🔌 2. Wallet Connection
 
-The app offers a simple way to simulate a wallet connection:
+1. **Generate New**: Creates a fresh BIP39 24-word mnemonic
+2. **Connect Wallet**:
+   - Derives Ed25519 keypair from mnemonic
+   - Connects to Demos Node via WebSocket
+   - Fetches initial balance
 
-1.  **Generate New**: Creates a fresh BIP39 mnemonic (24 words).
-2.  **Connect Wallet**:
-    - Derives the `Ed25519` private/public key pair from the mnemonic.
-    - Connects to the Demos Node (via WebSocket/HTTP).
-    - Fetches initial balance and publicly available data.
-
----
-
-## 💸 3. Sending Transactions: L1 vs L2PS
-
-The "Send" tab allows toggling between two distinct modes:
-
-### **L1 Mode (Public)**  📤
-- **What it is**: Standard blockchain transaction.
-- **Process**:
-    1.  Build transaction.
-    2.  Sign with wallet.
-    3.  Broadcast to network.
-- **Visibility**: Alice sends 5 coins to Bob. **Everyone** on the network sees "Alice -> Bob: 5 coins".
-
-### **L2PS Mode (Private)** 🔒
-- **What it is**: Encrypted transaction within a private subnet.
-- **Process**:
-    1.  Build "Inner" transaction (Alice -> Bob: 5 coins).
-    2.  **Encrypt** the inner transaction locally using `AES Key` + `IV`.
-    3.  Wrap it in an "Outer" transaction (Type: `l2ps`, To: `L2PS_UID`).
-    4.  Sign and broadcast.
-- **Visibility**:
-    - **Public Network**: Sees "Alice sent encrypted blob to L2PS Network". **Amount and Recipient are hidden.**
-    - **L2PS Nodes**: Can decrypt and validte.
-    - **Validators**: Receive only a hash of the transaction for ordering (Proof of History), not the content.
+**Note**: In production, use secure mnemonic storage and hardware wallet integration.
 
 ---
 
-## 📜 4. Transaction History
+## 💸 3. Sending Transactions
 
-The "History" tab combines both worlds but highlights a critical difference in data access.
+### L1 Mode (Public) 📤
 
-### **L1 History**
-- **Endpoint**: `getTransactionHistory`
-- **Access**: **Public**.
-- **Behavior**: You can request the history of *any* address. The node responds immediately with all plain-text transactions.
+Standard blockchain transaction visible to everyone:
 
-### **L2PS History** (The "Private" Part)
-- **Endpoint**: `getL2PSAccountTransactions`
-- **Access**: **Restricted (Authenticated)**.
-- **Mechanism**:
-    1.  To fetch history, the wallet **must sign** a request: `getL2PSHistory:{address}:{timestamp}`.
-    2.  The node verifies the signature matches the address.
-    3.  **If signature fails**: Access Denied (403).
-    4.  **If success**: Node returns the encrypted transaction history for *that specific user*.
-- **Implication**: Use A cannot see User B's L2PS history because User A cannot sign a request on behalf of User B.
+```
+Alice → Bob: 5 DEM
+     ↓
+[Everyone sees: "Alice → Bob: 5 DEM"]
+```
+
+### L2PS Mode (Private) 🔒
+
+Encrypted transaction with rollup:
+
+```
+Alice → Bob: 5 DEM
+     ↓
+[Browser encrypts with AES-256]
+     ↓
+[Network sees: "Encrypted blob → L2PS Network"]
+     ↓
+[Only L2PS nodes can decrypt]
+```
+
+### Transaction Fees
+
+| Type | Fee | Destination |
+|------|-----|-------------|
+| L1 Transaction | 0 DEM | N/A |
+| L2PS Transaction | **1 DEM** | Burned (removed from circulation) |
+
+The 1 DEM fee is automatically deducted from sender's balance in addition to the transfer amount.
 
 ---
 
-## Architecture Implementation Status
+## 📦 4. Transaction Lifecycle
+
+L2PS transactions go through multiple statuses:
+
+```
+[1] Submit      →  ⚡ Executed (local validation passed)
+      ↓
+[2] Wait ~10s   →  📦 Batched (included in L1 batch)
+      ↓
+[3] Consensus   →  ✓ Confirmed (L1 block confirmed)
+```
+
+### Batch Aggregation
+
+Every ~10 seconds, the node:
+1. Collects up to 10 pending L2PS transactions
+2. Aggregates their state changes (GCR edits)
+3. Generates ZK proof of validity
+4. Submits single batch transaction to L1
+
+---
+
+## 📜 5. Transaction History
+
+### Filter Tabs
+
+The History tab provides three views:
+
+| Tab | Shows | Count |
+|-----|-------|-------|
+| **All** | Combined and deduplicated | X |
+| **🔒 L2PS** | Only L2PS transactions | Y |
+| **📤 L1** | Only L1 transactions | Z |
+
+### Access Control
+
+| Type | Endpoint | Access |
+|------|----------|--------|
+| L1 History | `getTransactionHistory` | **Public** (anyone) |
+| L2PS History | `getL2PSAccountTransactions` | **Authenticated** (owner only) |
+
+**L2PS Authentication Flow:**
+1. Wallet signs: `getL2PSHistory:{address}:{timestamp}`
+2. Node verifies signature matches address
+3. If valid → returns private history
+4. If invalid → 403 Access Denied
+
+---
+
+## 🎓 6. Learn Tab Features
+
+The Learn tab provides interactive demonstrations:
+
+### Privacy Demo
+- **Fetch L2PS History** button opens choice modal
+- **Skip Signing** → Shows 403 ACCESS DENIED
+- **Sign Request** → Shows successful authenticated access
+
+### Educational Sections
+- What is L2PS?
+- Transaction Lifecycle visualization
+- Fee explanation
+- Key takeaways
+
+---
+
+## 🏗️ Architecture Status
 
 | Component | Status | Notes |
 |-----------|--------|-------|
-| **Client Encryption** | ✅ Ready | `utils/l2ps.ts` handles AES encryption |
-| **L2PS Node Decryption** | ✅ Ready | `handleL2PS.ts` decrypts incoming txs |
+| **Client Encryption** | ✅ Ready | `utils/l2ps.ts` handles AES-256 |
+| **L2PS Decryption** | ✅ Ready | `handleL2PS.ts` decrypts transactions |
+| **Transaction Fee** | ✅ Ready | 1 DEM burned per L2PS transaction |
 | **GCR Edits** | ✅ Ready | State changes calculated and stored |
 | **Mempool** | ✅ Ready | Separate `l2ps_mempool` table |
-| **Hash Service** | ✅ Ready | `L2PSHashService` runs every 5s |
-| **Consensus** | ✅ Ready | `L2PSConsensus` applies changes per block |
-| **Mempool Sync** | ✅ Ready | `L2PSConcurrentSync.ts` handles p2p sync |
-| **DTR Routing** | ✅ Ready | Relay of hashes to validators enabled |
-| **History API** | ✅ Ready | Authenticated endpoint implemented |
+| **Batch Aggregator** | ✅ Ready | Runs every 10s, max 10 tx/batch |
+| **ZK Proofs** | ✅ Ready | PLONK proofs for batch validity |
+| **Consensus** | ✅ Ready | GCR edits applied per L1 block |
+| **Mempool Sync** | ✅ Ready | P2P sync between nodes |
+| **DTR Routing** | ✅ Ready | Hash relay to validators |
+| **History API** | ✅ Ready | Authenticated endpoint |
+| **Filter Tabs** | ✅ Ready | All/L2PS/L1 filtering |
 
-## Files Structure
+---
+
+## 📁 File Structure
 
 ```
 poc-app/
 ├── src/
-│   ├── App.tsx          # Main Logic (Keys, Sync, History)
+│   ├── App.tsx              # Main application logic
 │   ├── utils/
-│   │   └── l2ps.ts      # Encryption & Tx Building
-│   └── index.css        # Styling
-├── .env                 # Configuration
-└── package.json
+│   │   └── l2ps.ts          # Encryption & transaction building
+│   └── index.css            # Styling with animations
+├── .env                     # Configuration (create from example)
+├── index.html               # Entry point
+├── vite.config.ts           # Vite configuration
+└── package.json             # Dependencies
 ```
+
+---
+
+## 🔧 Troubleshooting
+
+### "Failed to fetch balance"
+- Ensure node is running at configured URL
+- Check browser console for WebSocket errors
+
+### "Encryption failed"
+- Verify AES Key is 64 hex characters
+- Verify IV is 32 hex characters
+
+### "Access denied" for history
+- This is expected for other users' addresses
+- For your own address, signature verification should pass
+
+### "Insufficient balance"
+- L2PS requires amount + 1 DEM fee
+- Fund wallet using genesis configuration
+
+---
+
+## 🔗 Related Documentation
+
+- [L2PS Quickstart](../../src/libs/l2ps/L2PS_QUICKSTART.md) - Node setup from scratch
+- [L2PS Architecture](../../src/libs/l2ps/L2PS_DTR_IMPLEMENTATION.md) - Technical details
+- [ZK Proofs](../../src/libs/l2ps/zk/README.md) - Proof system documentation

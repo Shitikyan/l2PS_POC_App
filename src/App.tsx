@@ -498,52 +498,223 @@ function App() {
       <h1 className="main-title">L2PS Wallet</h1>
 
       {!isConnected ? (
-        <div className="card login-card">
-          <h2>Connect Wallet</h2>
-          <div style={{ textAlign: 'left' }}>
-            <label className="label">Node URL</label>
-            <input
-              value={nodeUrl}
-              onChange={e => setNodeUrl(e.target.value)}
-              placeholder="http://127.0.0.1:53550"
-            />
+        <div className="login-container">
+          {/* Hero Banner */}
+          <div className="hero-banner" style={{
+            background: 'linear-gradient(135deg, rgba(168, 85, 247, 0.2) 0%, rgba(100, 108, 255, 0.2) 100%)',
+            borderRadius: '16px',
+            padding: '2rem',
+            marginBottom: '1.5rem',
+            border: '1px solid rgba(168, 85, 247, 0.3)',
+            textAlign: 'center'
+          }}>
+            <div style={{ fontSize: '3rem', marginBottom: '0.5rem' }}>🔐</div>
+            <h2 style={{ margin: '0 0 0.5rem 0', color: '#c084fc' }}>Private Transactions Demo</h2>
+            <p style={{ margin: 0, color: '#94a3b8', fontSize: '0.9rem' }}>
+              Experience Layer 2 Privacy Subnets with encrypted transactions
+            </p>
+          </div>
 
-            <label className="label">Mnemonic Phrase</label>
-            <textarea
-              rows={3}
-              value={mnemonic}
-              onChange={e => setMnemonic(e.target.value)}
-              placeholder="Enter 24-word mnemonic"
-            />
+          {/* Feature pills */}
+          <div style={{
+            display: 'flex',
+            flexWrap: 'wrap',
+            gap: '0.5rem',
+            justifyContent: 'center',
+            marginBottom: '1.5rem'
+          }}>
+            <span style={{ padding: '0.4rem 0.8rem', background: 'rgba(168, 85, 247, 0.2)', borderRadius: '20px', fontSize: '0.75rem', color: '#c084fc' }}>
+              🔒 Client-side Encryption
+            </span>
+            <span style={{ padding: '0.4rem 0.8rem', background: 'rgba(74, 222, 128, 0.2)', borderRadius: '20px', fontSize: '0.75rem', color: '#4ade80' }}>
+              ⚡ Batch Rollups
+            </span>
+            <span style={{ padding: '0.4rem 0.8rem', background: 'rgba(100, 108, 255, 0.2)', borderRadius: '20px', fontSize: '0.75rem', color: '#8b93ff' }}>
+              🛡️ ZK Proofs
+            </span>
+          </div>
 
-            <div className="flex-row">
-              <button className="secondary-btn" onClick={generateMnemonic}>Generate New</button>
-              <button className="primary-btn" onClick={connectWallet} disabled={!mnemonic}>Connect Wallet</button>
+          {/* Connection Card */}
+          <div className="card login-card">
+            <h2 style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+              <span>🔌</span> Connect Wallet
+            </h2>
+            <div style={{ textAlign: 'left' }}>
+              {/* Node URL with status indicator */}
+              <label className="label" style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                Node URL
+                <span style={{
+                  fontSize: '0.7rem',
+                  padding: '0.15rem 0.4rem',
+                  background: 'rgba(74, 222, 128, 0.2)',
+                  borderRadius: '4px',
+                  color: '#4ade80'
+                }}>
+                  Local
+                </span>
+              </label>
+              <input
+                value={nodeUrl}
+                onChange={e => setNodeUrl(e.target.value)}
+                placeholder="http://127.0.0.1:53550"
+              />
+
+              <label className="label">Mnemonic Phrase</label>
+              <textarea
+                rows={3}
+                value={mnemonic}
+                onChange={e => setMnemonic(e.target.value)}
+                placeholder="Enter your 24-word recovery phrase..."
+                style={{ resize: 'none' }}
+              />
+              <p style={{
+                fontSize: '0.75rem',
+                color: '#64748b',
+                margin: '0.25rem 0 1rem',
+                fontStyle: 'italic'
+              }}>
+                💡 Click "Generate New" for a fresh test wallet
+              </p>
+
+              <div className="flex-row">
+                <button className="secondary-btn" onClick={generateMnemonic}>
+                  🎲 Generate New
+                </button>
+                <button className="primary-btn" onClick={connectWallet} disabled={!mnemonic}>
+                  🔗 Connect Wallet
+                </button>
+              </div>
             </div>
+          </div>
+
+          {/* Quick Info */}
+          <div style={{
+            marginTop: '1.5rem',
+            padding: '1rem',
+            background: 'rgba(0, 0, 0, 0.2)',
+            borderRadius: '12px',
+            fontSize: '0.8rem',
+            color: '#64748b'
+          }}>
+            <strong style={{ color: '#94a3b8' }}>ℹ️ About this Demo:</strong>
+            <ul style={{ margin: '0.5rem 0 0', paddingLeft: '1.25rem' }}>
+              <li>Send private (L2PS) or public (L1) transactions</li>
+              <li>L2PS transactions are encrypted in your browser</li>
+              <li>Each L2PS transaction costs 1 DEM (burned)</li>
+              <li>View the "Learn" tab for interactive explanations</li>
+            </ul>
           </div>
         </div>
       ) : (
         <div className="dashboard">
+          {/* Network Status Bar */}
+          <div style={{
+            display: 'flex',
+            justifyContent: 'space-between',
+            alignItems: 'center',
+            padding: '0.5rem 1rem',
+            background: 'rgba(74, 222, 128, 0.1)',
+            borderRadius: '8px',
+            marginBottom: '1rem',
+            fontSize: '0.75rem'
+          }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+              <span style={{
+                width: '8px',
+                height: '8px',
+                background: '#4ade80',
+                borderRadius: '50%',
+                boxShadow: '0 0 8px #4ade80'
+              }}></span>
+              <span style={{ color: '#4ade80' }}>Connected</span>
+            </div>
+            <div style={{ color: '#64748b' }}>
+              L2PS: <span style={{ color: '#a855f7' }}>{l2psUid}</span>
+            </div>
+          </div>
+
+          {/* Balance Card */}
           <div className="card balance-card">
-            <p className="address-display" title={address}>{address.slice(0, 10)}...{address.slice(-8)}</p>
+            {/* Address with copy button */}
+            <div style={{
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              gap: '0.5rem',
+              marginBottom: '0.5rem'
+            }}>
+              <p className="address-display" title={address} style={{ margin: 0 }}>
+                {address.slice(0, 10)}...{address.slice(-8)}
+              </p>
+              <button
+                onClick={() => {
+                  navigator.clipboard.writeText(address)
+                  addLog('📋 Address copied!')
+                }}
+                style={{
+                  background: 'transparent',
+                  border: 'none',
+                  padding: '0.25rem',
+                  cursor: 'pointer',
+                  opacity: 0.6
+                }}
+                title="Copy address"
+              >
+                📋
+              </button>
+            </div>
+
+            {/* Balance */}
             <div className="balance-display">
               <span className="balance-value">{balance}</span>
-              <span className="balance-unit">DMS</span>
+              <span className="balance-unit">DEM</span>
             </div>
+
+            {/* Quick stats */}
+            <div style={{
+              display: 'flex',
+              justifyContent: 'center',
+              gap: '1.5rem',
+              marginTop: '1rem',
+              paddingTop: '1rem',
+              borderTop: '1px solid rgba(255,255,255,0.1)'
+            }}>
+              <div style={{ textAlign: 'center' }}>
+                <div style={{ fontSize: '1.2rem', fontWeight: 'bold', color: '#a855f7' }}>
+                  {l2psHistory.length}
+                </div>
+                <div style={{ fontSize: '0.7rem', color: '#64748b' }}>L2PS Txs</div>
+              </div>
+              <div style={{ textAlign: 'center' }}>
+                <div style={{ fontSize: '1.2rem', fontWeight: 'bold', color: '#646cff' }}>
+                  {l1History.length}
+                </div>
+                <div style={{ fontSize: '0.7rem', color: '#64748b' }}>L1 Txs</div>
+              </div>
+              {l2psMempoolInfo && (
+                <div style={{ textAlign: 'center' }}>
+                  <div style={{ fontSize: '1.2rem', fontWeight: 'bold', color: '#fbbf24' }}>
+                    {l2psMempoolInfo.transactionCount || 0}
+                  </div>
+                  <div style={{ fontSize: '0.7rem', color: '#64748b' }}>Pending</div>
+                </div>
+              )}
+            </div>
+
             <button
               className="refresh-btn"
               onClick={refreshData}
-              style={{ marginTop: '1rem', background: 'transparent', border: '1px solid rgba(255,255,255,0.2)', padding: '0.5rem 1rem', fontSize: '0.8rem' }}
+              style={{
+                marginTop: '1rem',
+                background: 'transparent',
+                border: '1px solid rgba(255,255,255,0.2)',
+                padding: '0.5rem 1rem',
+                fontSize: '0.8rem',
+                width: '100%'
+              }}
             >
-              🔄 Refresh
+              🔄 Refresh Data
             </button>
-
-            {/* L2PS Mempool Status */}
-            {l2psMempoolInfo && mode === 'l2ps' && (
-              <div style={{ marginTop: '1rem', fontSize: '0.8rem', opacity: 0.7 }}>
-                <span>L2PS Mempool: {l2psMempoolInfo.transactionCount || 0} txs</span>
-              </div>
-            )}
           </div>
 
           <div className="tabs">
@@ -571,29 +742,45 @@ function App() {
             <div className="card send-card">
               <div className="send-form">
 
-                <div className="flex-row" style={{ marginBottom: '1rem' }}>
-                  <button
-                    className={`mode-btn ${mode === 'l2ps' ? 'active' : ''}`}
-                    onClick={() => setMode('l2ps')}
-                    style={{
-                      background: mode === 'l2ps' ? '#a855f7' : '#333',
-                      fontWeight: mode === 'l2ps' ? 'bold' : 'normal',
-                      border: mode === 'l2ps' ? '1px solid white' : '1px solid transparent'
-                    }}
-                  >
-                    L2PS (Private)
-                  </button>
-                  <button
-                    className={`mode-btn ${mode === 'l1' ? 'active' : ''}`}
-                    onClick={() => setMode('l1')}
-                    style={{
-                      background: mode === 'l1' ? '#646cff' : '#333',
-                      fontWeight: mode === 'l1' ? 'bold' : 'normal',
-                      border: mode === 'l1' ? '1px solid white' : '1px solid transparent'
-                    }}
-                  >
-                    L1 (Public)
-                  </button>
+                {/* Mode Selector with descriptions */}
+                <div style={{ marginBottom: '1.5rem' }}>
+                  <div className="flex-row" style={{ marginBottom: '0.5rem' }}>
+                    <button
+                      className={`mode-btn ${mode === 'l2ps' ? 'active' : ''}`}
+                      onClick={() => setMode('l2ps')}
+                      style={{
+                        background: mode === 'l2ps' ? 'linear-gradient(135deg, #a855f7, #8b5cf6)' : '#333',
+                        fontWeight: mode === 'l2ps' ? 'bold' : 'normal',
+                        border: mode === 'l2ps' ? '1px solid rgba(255,255,255,0.3)' : '1px solid transparent'
+                      }}
+                    >
+                      🔒 L2PS (Private)
+                    </button>
+                    <button
+                      className={`mode-btn ${mode === 'l1' ? 'active' : ''}`}
+                      onClick={() => setMode('l1')}
+                      style={{
+                        background: mode === 'l1' ? 'linear-gradient(135deg, #646cff, #535bf2)' : '#333',
+                        fontWeight: mode === 'l1' ? 'bold' : 'normal',
+                        border: mode === 'l1' ? '1px solid rgba(255,255,255,0.3)' : '1px solid transparent'
+                      }}
+                    >
+                      📤 L1 (Public)
+                    </button>
+                  </div>
+                  {/* Mode description */}
+                  <div style={{
+                    padding: '0.5rem 0.75rem',
+                    borderRadius: '6px',
+                    fontSize: '0.75rem',
+                    background: mode === 'l2ps' ? 'rgba(168, 85, 247, 0.1)' : 'rgba(100, 108, 255, 0.1)',
+                    color: mode === 'l2ps' ? '#c084fc' : '#8b93ff'
+                  }}>
+                    {mode === 'l2ps'
+                      ? '🔐 Encrypted in browser → Only you and recipient know the details'
+                      : '📢 Public transaction → Visible to everyone on the network'
+                    }
+                  </div>
                 </div>
 
                 <label className="label">Recipient Address</label>
@@ -602,8 +789,11 @@ function App() {
                   onChange={e => setRecipient(e.target.value)}
                   placeholder="0x..."
                 />
+                <p style={{ fontSize: '0.7rem', color: '#64748b', margin: '0.25rem 0 0.5rem' }}>
+                  💡 Paste any valid address or use your own for testing
+                </p>
 
-                <label className="label">Amount (DMS)</label>
+                <label className="label">Amount (DEM)</label>
                 <input
                   type="number"
                   value={amount}
@@ -1026,7 +1216,7 @@ function App() {
                     <span className="step-number">4</span>
                     <div className="step-content">
                       <strong>Batch</strong>
-                      <span>Every 10s, up to 10 txs bundled (status: 📦 Batched)</span>
+                      <span>Per L1 block, up to 10 txs bundled (status: 📦 Batched)</span>
                     </div>
                   </div>
                   <div className="timeline-step">
@@ -1290,16 +1480,156 @@ function App() {
                 </div>
               </div>
 
-              {/* Section 6: Key Points */}
+              {/* Section 6: Transaction Lifecycle */}
+              <div className="learn-section">
+                <h3>🔄 L2PS Transaction Lifecycle</h3>
+                <p>Every L2PS transaction progresses through three distinct stages of verification and finality:</p>
+
+                <div style={{
+                  display: 'flex',
+                  flexDirection: 'column',
+                  gap: '1rem',
+                  marginTop: '1.5rem',
+                  paddingLeft: '1rem',
+                  borderLeft: '2px solid rgba(168, 85, 247, 0.3)'
+                }}>
+                  <div style={{ position: 'relative' }}>
+                    <div style={{
+                      position: 'absolute',
+                      left: '-1.45rem',
+                      top: '0.2rem',
+                      width: '12px',
+                      height: '12px',
+                      borderRadius: '50%',
+                      background: '#a855f7',
+                      boxShadow: '0 0 10px #a855f7'
+                    }}></div>
+                    <strong style={{ color: '#a855f7' }}>⚡ Stage 1: Executed</strong>
+                    <p style={{ margin: '0.25rem 0 0.5rem 0', fontSize: '0.85rem', color: '#94a3b8' }}>
+                      Occurs within milliseconds. The local node decrypts, validates GCR edits against L1 state, and reserves the balance.
+                    </p>
+                  </div>
+
+                  <div style={{ position: 'relative' }}>
+                    <div style={{
+                      position: 'absolute',
+                      left: '-1.45rem',
+                      top: '0.2rem',
+                      width: '12px',
+                      height: '12px',
+                      borderRadius: '50%',
+                      background: '#fbbf24',
+                      boxShadow: '0 0 10px #fbbf24'
+                    }}></div>
+                    <strong style={{ color: '#fbbf24' }}>📦 Stage 2: Batched</strong>
+                    <p style={{ margin: '0.25rem 0 0.5rem 0', fontSize: '0.85rem', color: '#94a3b8' }}>
+                      Occurs per L1 block. Multiple private transactions are bundled into an L1 batch, and a ZK proof is generated.
+                    </p>
+                  </div>
+
+                  <div style={{ position: 'relative' }}>
+                    <div style={{
+                      position: 'absolute',
+                      left: '-1.45rem',
+                      top: '0.2rem',
+                      width: '12px',
+                      height: '12px',
+                      borderRadius: '50%',
+                      background: '#4ade80',
+                      boxShadow: '0 0 10px #4ade80'
+                    }}></div>
+                    <strong style={{ color: '#4ade80' }}>✓ Stage 3: Confirmed</strong>
+                    <p style={{ margin: '0.25rem 0 0 0', fontSize: '0.85rem', color: '#94a3b8' }}>
+                      The L1 batch is included in a finalized block. Your transaction is now immutable and permanent on the blockchain.
+                    </p>
+                  </div>
+                </div>
+              </div>
+
+              {/* Section 7: Architecture Visualization */}
+              <div className="learn-section">
+                <h3>🏗️ Rollup Architecture</h3>
+                <div className="learn-box" style={{ padding: '1.5rem' }}>
+                  <div style={{ fontFamily: 'monospace', fontSize: '0.8rem', lineHeight: '1.6' }}>
+                    <div style={{ color: '#94a3b8', marginBottom: '1rem' }}>
+                      Multiple L2PS transactions are batched into a single L1 transaction:
+                    </div>
+                    <div style={{
+                      display: 'flex',
+                      flexDirection: 'column',
+                      gap: '0.5rem',
+                      background: 'rgba(0,0,0,0.3)',
+                      padding: '1rem',
+                      borderRadius: '8px'
+                    }}>
+                      <div style={{ color: '#a855f7' }}>TX 1 ──┐</div>
+                      <div style={{ color: '#a855f7' }}>TX 2 ──┤</div>
+                      <div style={{ color: '#a855f7' }}>TX 3 ──┼──→ [Batch Aggregator] ──→ 1 L1 Transaction</div>
+                      <div style={{ color: '#a855f7' }}>TX 4 ──┤       (per block)</div>
+                      <div style={{ color: '#a855f7' }}>TX 5 ──┘</div>
+                    </div>
+                    <div style={{ marginTop: '1rem', color: '#94a3b8' }}>
+                      <strong style={{ color: '#4ade80' }}>Benefits:</strong>
+                      <ul style={{ margin: '0.5rem 0', paddingLeft: '1.5rem' }}>
+                        <li>Reduced L1 congestion</li>
+                        <li>Lower gas costs (amortized across batch)</li>
+                        <li>Privacy preserved with ZK proofs</li>
+                      </ul>
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              {/* Section 7: Key Points */}
               <div className="learn-section">
                 <h3>💡 Key Takeaways</h3>
                 <ul className="learn-list">
-                  <li>✅ <strong>Client-side encryption</strong> - Node never sees plaintext</li>
-                  <li>✅ <strong>Signature verification</strong> - Only you can access your history</li>
-                  <li>✅ <strong>Batch aggregation</strong> - Multiple txs → 1 L1 transaction</li>
-                  <li>✅ <strong>ZK Proofs</strong> - Validators verify without seeing content</li>
-                  <li>✅ <strong>1 DEM fee</strong> - Same cost as public transactions</li>
+                  <li>✅ <strong>Client-side encryption</strong> - Transaction encrypted in browser with AES-256</li>
+                  <li>✅ <strong>Signature verification</strong> - Only address owner can access their L2PS history</li>
+                  <li>✅ <strong>Batch aggregation</strong> - Up to 10 transactions bundled per L1 block</li>
+                  <li>✅ <strong>ZK Proofs</strong> - PLONK proofs verify validity without revealing content</li>
+                  <li>✅ <strong>1 DEM fee</strong> - Burned per transaction (deflationary mechanism)</li>
+                  <li>✅ <strong>Status tracking</strong> - Executed → Batched → Confirmed lifecycle</li>
                 </ul>
+              </div>
+
+              {/* Section 8: Quick Reference */}
+              <div className="learn-section" style={{ borderBottom: 'none' }}>
+                <h3>📋 Quick Reference</h3>
+                <div className="learn-box">
+                  <table style={{
+                    width: '100%',
+                    fontSize: '0.85rem',
+                    borderCollapse: 'collapse'
+                  }}>
+                    <tbody>
+                      <tr style={{ borderBottom: '1px solid rgba(255,255,255,0.1)' }}>
+                        <td style={{ padding: '0.5rem 0', color: '#94a3b8' }}>L2PS UID</td>
+                        <td style={{ padding: '0.5rem 0', fontFamily: 'monospace', color: '#a855f7' }}>{l2psUid}</td>
+                      </tr>
+                      <tr style={{ borderBottom: '1px solid rgba(255,255,255,0.1)' }}>
+                        <td style={{ padding: '0.5rem 0', color: '#94a3b8' }}>Transaction Fee</td>
+                        <td style={{ padding: '0.5rem 0', fontFamily: 'monospace', color: '#4ade80' }}>1 DEM (burned)</td>
+                      </tr>
+                      <tr style={{ borderBottom: '1px solid rgba(255,255,255,0.1)' }}>
+                        <td style={{ padding: '0.5rem 0', color: '#94a3b8' }}>Batch Interval</td>
+                        <td style={{ padding: '0.5rem 0', fontFamily: 'monospace' }}>Per L1 block</td>
+                      </tr>
+                      <tr style={{ borderBottom: '1px solid rgba(255,255,255,0.1)' }}>
+                        <td style={{ padding: '0.5rem 0', color: '#94a3b8' }}>Max Batch Size</td>
+                        <td style={{ padding: '0.5rem 0', fontFamily: 'monospace' }}>10 transactions</td>
+                      </tr>
+                      <tr style={{ borderBottom: '1px solid rgba(255,255,255,0.1)' }}>
+                        <td style={{ padding: '0.5rem 0', color: '#94a3b8' }}>Encryption</td>
+                        <td style={{ padding: '0.5rem 0', fontFamily: 'monospace' }}>AES-256-CBC</td>
+                      </tr>
+                      <tr>
+                        <td style={{ padding: '0.5rem 0', color: '#94a3b8' }}>Proof System</td>
+                        <td style={{ padding: '0.5rem 0', fontFamily: 'monospace' }}>PLONK (ZK-SNARK)</td>
+                      </tr>
+                    </tbody>
+                  </table>
+                </div>
               </div>
             </div>
           )}
