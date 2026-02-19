@@ -1,5 +1,6 @@
 
-import { useState, useEffect, useCallback } from 'react'
+import { useState, useEffect, useCallback, useRef, type ReactPortal } from 'react'
+import { createPortal } from 'react-dom'
 import { Demos } from "@kynesyslabs/demosdk/websdk"
 import * as bip39 from "bip39"
 import {
@@ -13,7 +14,7 @@ import './index.css'
 
 // Default constants
 // Default constants
-const DEFAULT_NODE_URL = import.meta.env.VITE_NODE_URL || "http://127.0.0.1:53550"
+const DEFAULT_NODE_URL = import.meta.env.VITE_NODE_URL || "/rpc"
 const DEFAULT_L2PS_UID = import.meta.env.VITE_L2PS_UID || "testnet_l2ps_001"
 // Keys should come from env or user input
 const DEFAULT_AES_KEY = import.meta.env.VITE_L2PS_AES_KEY || "b9346ff30a8202cd46caa7b4b0142bfc727c99cc0f8667580af945b493038055"
@@ -32,6 +33,113 @@ interface TxHistoryItem {
   from?: string;
   to?: string;
   l1_block_number?: number;
+}
+
+/** Small (?) icon with a portal tooltip rendered in <body> — bypasses all backdrop-filter/stacking issues */
+function Hint({ text }: { text: string }) {
+  const ref = useRef<HTMLSpanElement>(null)
+  const [show, setShow] = useState(false)
+  const [pos, setPos] = useState({ x: 0, y: 0 })
+
+  const onEnter = () => {
+    if (!ref.current) return
+    const rect = ref.current.getBoundingClientRect()
+    setPos({ x: rect.left + rect.width / 2, y: rect.top - 8 })
+    setShow(true)
+  }
+
+  return (
+    <>
+      <span
+        ref={ref}
+        className="hint-icon"
+        onMouseEnter={onEnter}
+        onMouseLeave={() => setShow(false)}
+      >?</span>
+      {show && createPortal(
+        <div className="hint-tooltip" style={{ left: pos.x, top: pos.y }}>
+          {text}
+        </div>,
+        document.body
+      )}
+    </>
+  )
+}
+
+/**
+ * Convert raw server/SDK error messages into user-friendly text.
+ * Returns { title, detail } for the toast.
+ */
+function friendlyError(raw: string): { title: string; detail: string } {
+  const s = raw.replace(/\\n/g, ' ').trim()
+
+  // --- Balance errors ---
+  const balMatch = s.match(/Insufficient balance[:\s]*need\s+(\d+)\s+but\s+have\s+(\d+)/i)
+  if (balMatch) {
+    const need = balMatch[1]
+    const have = balMatch[2]
+    return {
+      title: 'Insufficient Balance',
+      detail: `Your wallet has ${have} DEM but this transaction requires ${need} DEM.`
+    }
+  }
+
+  // L2PS balance with fee breakdown: "need X (Y + Z fee) but have W"
+  const balFeeMatch = s.match(/Insufficient balance[:\s]*need\s+(\d+)\s+\((\d+)\s*\+\s*(\d+)\s*fee\)\s+but\s+have\s+(\d+)/i)
+  if (balFeeMatch) {
+    const [, total, amount, fee, have] = balFeeMatch
+    return {
+      title: 'Insufficient Balance',
+      detail: `Need ${total} DEM (${amount} + ${fee} fee) but your wallet only has ${have} DEM.`
+    }
+  }
+
+  // --- Signature errors ---
+  if (/SIGNATURE\s*ERROR/i.test(s) || /signature.*verif/i.test(s)) {
+    return {
+      title: 'Signature Error',
+      detail: 'Transaction signature could not be verified. Please reconnect your wallet and try again.'
+    }
+  }
+
+  // --- Missing fields ---
+  if (/No\s+.?from.?\s+field/i.test(s)) {
+    return { title: 'Invalid Transaction', detail: 'Sender address is missing. Please reconnect your wallet.' }
+  }
+
+  // --- Duplicate transaction ---
+  if (/already\s+processed|duplicate/i.test(s)) {
+    return { title: 'Duplicate Transaction', detail: 'This transaction has already been processed.' }
+  }
+
+  // --- L2PS network not found ---
+  if (/L2PS.*not found|missing config/i.test(s)) {
+    return { title: 'L2PS Network Error', detail: 'The L2PS network is not available. Check your L2PS UID in settings.' }
+  }
+
+  // --- Decryption failure ---
+  if (/[Dd]ecryption failed/i.test(s)) {
+    return { title: 'Decryption Failed', detail: 'Could not decrypt the transaction. Verify your AES key and IV in settings.' }
+  }
+
+  // --- Hash mismatch ---
+  if (/hash mismatch/i.test(s)) {
+    return { title: 'Integrity Error', detail: 'Transaction data was corrupted in transit. Please try again.' }
+  }
+
+  // --- Connection / network ---
+  if (/ECONNREFUSED|ETIMEDOUT|fetch failed|network/i.test(s)) {
+    return { title: 'Connection Error', detail: 'Could not reach the node. Check your connection and node URL.' }
+  }
+
+  // --- Generic fallback: strip server prefixes for readability ---
+  const cleaned = s
+    .replace(/^\[Confirm\]\s*Transaction\s*is\s*not\s*valid:\s*/i, '')
+    .replace(/\[(?:Native\s+)?Tx\s+Validation\]\s*/gi, '')
+    .replace(/\[[\w\s]+ERROR\]\s*/gi, '')
+    .trim()
+
+  return { title: 'Transaction Failed', detail: cleaned || 'An unknown error occurred.' }
 }
 
 function App() {
@@ -66,6 +174,29 @@ function App() {
   const [l2psMempoolInfo, setL2psMempoolInfo] = useState<any>(null)
   const [activeTab, setActiveTab] = useState<'send' | 'history' | 'learn'>('send')
   const [historyFilter, setHistoryFilter] = useState<'all' | 'l2ps' | 'l1'>('all')
+
+
+  // Toast notifications
+  interface Toast {
+    id: number
+    type: 'success' | 'error' | 'info'
+    title: string
+    message?: string
+  }
+  const [toasts, setToasts] = useState<Toast[]>([])
+  const toastIdRef = useRef(0)
+
+  const showToast = useCallback((type: Toast['type'], title: string, message?: string) => {
+    const id = ++toastIdRef.current
+    setToasts(prev => [...prev, { id, type, title, message }])
+    setTimeout(() => {
+      setToasts(prev => prev.filter(t => t.id !== id))
+    }, type === 'error' ? 8000 : 6000)
+  }, [])
+
+  const dismissToast = useCallback((id: number) => {
+    setToasts(prev => prev.filter(t => t.id !== id))
+  }, [])
 
   // Demo states for Learn tab
   const [demoLoading, setDemoLoading] = useState<boolean>(false)
@@ -136,7 +267,7 @@ function App() {
         const balStr = typeof bal === 'bigint' ? bal.toString() : String(bal)
 
         setBalance(balStr)
-        addLog(`Balance: ${balStr} DMS`)
+        addLog(`Balance: ${balStr} DEM`)
       } else {
         addLog(`Balance fetch failed: result=${response?.result}`)
         console.log("[Balance] Failed response:", response)
@@ -335,7 +466,7 @@ function App() {
   const connectWallet = async () => {
     try {
       if (!mnemonic) {
-        addLog("Error: Mnemonic is required")
+        showToast('error', 'Mnemonic Required', 'Enter your wallet mnemonic to connect')
         return
       }
 
@@ -366,6 +497,7 @@ function App() {
       await fetchL2PSTransactions(demosInstance, formattedAddr)
 
     } catch (err: any) {
+      showToast('error', 'Connection Failed', err.message || String(err))
       addLog(`Connection Failed: ${err.message || err}`)
       console.error(err)
     }
@@ -374,21 +506,23 @@ function App() {
   const sendTransaction = async () => {
     if (!demos || !isConnected) return
     if (!recipient) {
-      addLog("Error: Recipient address is required")
+      showToast('error', 'Missing Recipient', 'Enter a recipient address')
       return
     }
 
     // L2PS Specific Checks
     if (mode === 'l2ps') {
       if (!aesKey || !iv) {
-        addLog("Error: AES Key and IV are required for L2PS encryption")
+        showToast('error', 'Missing L2PS Keys', 'AES Key and IV are required for L2PS encryption')
         setShowSettings(true)
         return
       }
     }
 
-    setSending(true)
     const typeLabel = mode === 'l1' ? 'L1' : 'L2PS'
+    const amountValue = parseFloat(amount) || 0
+
+    setSending(true)
     addLog(`Preparing to send ${txCount} ${typeLabel} transactions...`)
 
     try {
@@ -400,29 +534,23 @@ function App() {
 
       const signerAddress = normalizeHex(await demos.getEd25519Address(), "Ed25519 address")
       const toAddress = normalizeHex(recipient, "Recipient address")
-      const amountValue = parseFloat(amount) || 0
 
       let currentNonce = (await demos.getAddressNonce(signerAddress)) + 1
-      addLog(`Starting nonce: ${currentNonce}`)
+      const sentHashes: string[] = []
 
       for (let i = 0; i < txCount; i++) {
-
         const payload: TxPayload = {
           l2ps_uid: mode === 'l2ps' ? l2psUid : undefined,
           message: `${txMessage} [${i + 1}/${txCount}]`
         }
 
-        // 1. Build Transaction 
         const tx = await buildInnerTransaction(demos, toAddress, amountValue, payload)
-
         let finalTx = tx;
 
-        // 2. Encrypt (L2PS Only)
         if (mode === 'l2ps' && l2ps) {
           const encryptedTx = await l2ps.encryptTx(tx)
           const [, encryptedPayload] = encryptedTx.content.data
 
-          // Build Outer Tx
           finalTx = await buildL2PSTransaction(
             demos,
             encryptedPayload as L2PSEncryptedPayload,
@@ -431,21 +559,25 @@ function App() {
           )
         }
 
-        // 3. Confirm/Verify
         const validityResponse = await demos.confirm(finalTx)
 
         const validityData = validityResponse.response as any
         if (!validityData?.data?.valid) {
-          throw new Error(`Invalid tx: ${validityData?.data?.message ?? "Unknown"}`)
+          throw new Error(validityData?.data?.message?.trim() ?? "Transaction rejected by node")
         }
 
-        // 4. Broadcast
-        await demos.broadcast(validityResponse)
+        const broadcastResponse: any = await demos.broadcast(validityResponse)
 
-        addLog(`✅ Sent ${typeLabel} Tx: ${finalTx.hash.slice(0, 12)}...`)
+        if (broadcastResponse?.result !== 200) {
+          const extra = broadcastResponse?.extra
+            || broadcastResponse?.response?.extra
+            || broadcastResponse?.response
+          const msg = typeof extra === 'string' ? extra : JSON.stringify(extra)
+          throw new Error(msg || 'Broadcast failed')
+        }
 
-        addLog(`✅ Sent ${typeLabel} Tx: ${finalTx.hash.slice(0, 12)}...`)
-
+        sentHashes.push(tx.hash)
+        addLog(`Sent ${typeLabel} tx ${i + 1}: ${tx.hash.slice(0, 16)}...`)
         currentNonce++
 
         if (i < txCount - 1) {
@@ -453,9 +585,18 @@ function App() {
         }
       }
 
-      addLog(`🎉 All ${txCount} transactions submitted!`)
+      const hashSummary = sentHashes.length === 1
+        ? `Hash: ${sentHashes[0].slice(0, 12)}...${sentHashes[0].slice(-6)}`
+        : sentHashes.map((h, i) => `#${i + 1}: ${h.slice(0, 10)}...${h.slice(-4)}`).join('\n')
 
-      // Refresh data immediately after sending
+      showToast(
+        'success',
+        `${txCount} ${typeLabel} tx${txCount > 1 ? 's' : ''} sent — ${amountValue} DEM`,
+        `To: ${toAddress.slice(0, 10)}...${toAddress.slice(-6)}\n${hashSummary}`
+      )
+      addLog(`All ${txCount} transactions submitted`)
+
+      // Refresh data
       setTimeout(async () => {
         await fetchBalance(demos, address)
         await fetchL1Transactions(demos, address)
@@ -466,7 +607,10 @@ function App() {
       }, 1000)
 
     } catch (e: any) {
-      addLog(`❌ Error: ${e.message || e}`)
+      const rawMsg = e.message || String(e)
+      const { title, detail } = friendlyError(rawMsg)
+      showToast('error', title, detail)
+      addLog(`Error: ${rawMsg}`)
       console.error(e)
     } finally {
       setSending(false)
@@ -495,6 +639,24 @@ function App() {
 
   return (
     <div className="App">
+      {/* Toast Notifications */}
+      {toasts.length > 0 && (
+        <div className="toast-container">
+          {toasts.map(toast => (
+            <div key={toast.id} className={`toast toast-${toast.type}`}>
+              <div className="toast-icon">
+                {toast.type === 'success' ? '✓' : toast.type === 'error' ? '!' : 'i'}
+              </div>
+              <div className="toast-body">
+                <div className="toast-title">{toast.title}</div>
+                {toast.message && <div className="toast-message" style={{ whiteSpace: 'pre-line' }}>{toast.message}</div>}
+              </div>
+              <button className="toast-close" onClick={() => dismissToast(toast.id)}>×</button>
+            </div>
+          ))}
+        </div>
+      )}
+
       <h1 className="main-title">L2PS Wallet</h1>
 
       {!isConnected ? (
@@ -878,6 +1040,7 @@ function App() {
             </div>
           )}
 
+
           {activeTab === 'history' && (
             <div className="card history-card">
               {/* History Filter Tabs */}
@@ -1002,74 +1165,31 @@ function App() {
 
                           {/* Transaction Details */}
                           <div className={`tx-body ${isL2PS && !revealed ? 'blurred' : ''}`}>
-                            {/* Hash Row */}
-                            <div className="tx-row">
-                              <span className="tx-label">{isL2PS ? 'Inner Hash' : 'Hash'}</span>
-                              <div className="tx-value-group">
-                                <span
-                                  className="tx-hash"
-                                  title={`Click to copy: ${tx.hash}`}
-                                  onClick={(e) => { e.stopPropagation(); copyToClipboard(tx.hash, 'hash') }}
-                                >
-                                  {tx.hash?.slice(0, 20)}...{tx.hash?.slice(-8)}
-                                </span>
-                                <button
-                                  className="copy-btn"
-                                  onClick={(e) => { e.stopPropagation(); copyToClipboard(tx.hash, 'hash') }}
-                                  title="Copy full hash"
-                                >
-                                  📋
-                                </button>
-                              </div>
-                            </div>
 
-                            {/* Outer Hash for L2PS */}
-                            {tx.outerHash && (
-                              <div className="tx-row">
-                                <span className="tx-label">Outer Hash</span>
-                                <div className="tx-value-group">
-                                  <span
-                                    className="tx-hash encrypted"
-                                    title={`Outer encrypted hash: ${tx.outerHash}`}
-                                    onClick={(e) => { e.stopPropagation(); copyToClipboard(tx.outerHash!, 'outer hash') }}
-                                  >
-                                    {tx.outerHash?.slice(0, 16)}...
-                                  </span>
-                                  <button
-                                    className="copy-btn"
-                                    onClick={(e) => { e.stopPropagation(); copyToClipboard(tx.outerHash!, 'outer hash') }}
-                                    title="Copy outer hash"
-                                  >
-                                    📋
-                                  </button>
-                                </div>
-                              </div>
-                            )}
-
-                            {/* Amount */}
+                            {/* Amount — prominent, always first */}
                             {tx.amount !== undefined && tx.amount > 0 && (
-                              <div className="tx-row">
-                                <span className="tx-label">Amount</span>
-                                <span className="tx-amount">{tx.amount.toLocaleString()} DMS</span>
+                              <div className="tx-row tx-row-amount">
+                                <span className="tx-amount-big">{tx.amount.toLocaleString()} DEM</span>
+                                {isL2PS && <span className="tx-fee-hint" title="L2PS privacy fee is automatically deducted">+ 1 DEM fee</span>}
                               </div>
                             )}
 
-                            {/* From/To for L2PS */}
-                            {isL2PS && tx.from && (
+                            {/* From / To */}
+                            {tx.from && (
                               <div className="tx-row">
-                                <span className="tx-label">From</span>
+                                <span className="tx-label">Sender <Hint text="Wallet address that initiated this transaction" /></span>
                                 <div className="tx-value-group">
                                   <span
                                     className="tx-address"
-                                    onClick={(e) => { e.stopPropagation(); copyToClipboard(tx.from!, 'sender') }}
-                                    title={tx.from}
+                                    onClick={(e) => { e.stopPropagation(); copyToClipboard(tx.from!, 'sender address') }}
+                                    title={`Full address: ${tx.from}\nClick to copy`}
                                   >
-                                    {tx.from?.slice(0, 12)}...{tx.from?.slice(-6)}
+                                    {tx.from?.slice(0, 10)}...{tx.from?.slice(-6)}
                                   </span>
                                   <button
                                     className="copy-btn"
-                                    onClick={(e) => { e.stopPropagation(); copyToClipboard(tx.from!, 'sender') }}
-                                    title="Copy sender address"
+                                    onClick={(e) => { e.stopPropagation(); copyToClipboard(tx.from!, 'sender address') }}
+                                    title="Copy full sender address"
                                   >
                                     📋
                                   </button>
@@ -1077,21 +1197,21 @@ function App() {
                               </div>
                             )}
 
-                            {isL2PS && tx.to && (
+                            {tx.to && (
                               <div className="tx-row">
-                                <span className="tx-label">To</span>
+                                <span className="tx-label">Recipient <Hint text="Wallet address that received this transaction" /></span>
                                 <div className="tx-value-group">
                                   <span
                                     className="tx-address"
-                                    onClick={(e) => { e.stopPropagation(); copyToClipboard(tx.to!, 'recipient') }}
-                                    title={tx.to}
+                                    onClick={(e) => { e.stopPropagation(); copyToClipboard(tx.to!, 'recipient address') }}
+                                    title={`Full address: ${tx.to}\nClick to copy`}
                                   >
-                                    {tx.to?.slice(0, 12)}...{tx.to?.slice(-6)}
+                                    {tx.to?.slice(0, 10)}...{tx.to?.slice(-6)}
                                   </span>
                                   <button
                                     className="copy-btn"
-                                    onClick={(e) => { e.stopPropagation(); copyToClipboard(tx.to!, 'recipient') }}
-                                    title="Copy recipient address"
+                                    onClick={(e) => { e.stopPropagation(); copyToClipboard(tx.to!, 'recipient address') }}
+                                    title="Copy full recipient address"
                                   >
                                     📋
                                   </button>
@@ -1099,42 +1219,107 @@ function App() {
                               </div>
                             )}
 
-                            {/* Message */}
+                            {/* Status message */}
                             {tx.message && (
                               <div className="tx-row">
-                                <span className="tx-label">Message</span>
+                                <span className="tx-label">Status <Hint text="Current state of this transaction on the network" /></span>
                                 <span className="tx-message">{tx.message}</span>
                               </div>
                             )}
 
                             {/* Timestamp */}
                             <div className="tx-row">
-                              <span className="tx-label">Time</span>
+                              <span className="tx-label">Time <Hint text="When this transaction was created and signed" /></span>
                               <span className="tx-time" title={new Date(tx.timestamp).toISOString()}>
                                 {new Date(tx.timestamp).toLocaleString()}
                               </span>
                             </div>
 
-                            {/* L1 Block / Batch for confirmed L2PS */}
-                            {(tx.l1BatchHash || tx.l1_block_number) && (
-                              <div className="tx-row">
-                                <span className="tx-label">L1 Context</span>
-                                <div className="tx-value-column">
-                                  {tx.l1_block_number && (
-                                    <span className="tx-block">Block: #{tx.l1_block_number}</span>
-                                  )}
-                                  {tx.l1BatchHash && (
+                            {/* On-chain details — collapsible section */}
+                            <details className="tx-details-section">
+                              <summary className="tx-details-toggle">On-chain details</summary>
+                              <div className="tx-details-content">
+
+                                {/* Transaction Hash */}
+                                <div className="tx-row">
+                                  <span className="tx-label">Transaction ID <Hint text="Unique cryptographic hash identifying this transaction" /></span>
+                                  <div className="tx-value-group">
                                     <span
-                                      className="tx-hash mini"
-                                      title={`L1 Batch: ${tx.l1BatchHash}`}
-                                      onClick={(e) => { e.stopPropagation(); copyToClipboard(tx.l1BatchHash!, 'L1 batch hash') }}
+                                      className="tx-hash"
+                                      title={`Full hash: ${tx.hash}\nClick to copy`}
+                                      onClick={(e) => { e.stopPropagation(); copyToClipboard(tx.hash, 'transaction ID') }}
                                     >
-                                      Batch: {tx.l1BatchHash?.slice(0, 12)}...
+                                      {tx.hash?.slice(0, 16)}...{tx.hash?.slice(-6)}
                                     </span>
-                                  )}
+                                    <button
+                                      className="copy-btn"
+                                      onClick={(e) => { e.stopPropagation(); copyToClipboard(tx.hash, 'transaction ID') }}
+                                      title="Copy full transaction ID"
+                                    >
+                                      📋
+                                    </button>
+                                  </div>
                                 </div>
+
+                                {/* Encrypted ID for L2PS */}
+                                {tx.outerHash && (
+                                  <div className="tx-row">
+                                    <span className="tx-label">Privacy ID <Hint text="Encrypted version visible on the public chain. Only you can see the real content." /></span>
+                                    <div className="tx-value-group">
+                                      <span
+                                        className="tx-hash encrypted"
+                                        title={`Full encrypted hash: ${tx.outerHash}\nThis is what validators and public observers see on-chain`}
+                                        onClick={(e) => { e.stopPropagation(); copyToClipboard(tx.outerHash!, 'privacy ID') }}
+                                      >
+                                        {tx.outerHash?.slice(0, 16)}...
+                                      </span>
+                                      <button
+                                        className="copy-btn"
+                                        onClick={(e) => { e.stopPropagation(); copyToClipboard(tx.outerHash!, 'privacy ID') }}
+                                        title="Copy privacy ID"
+                                      >
+                                        📋
+                                      </button>
+                                    </div>
+                                  </div>
+                                )}
+
+                                {/* L1 Block / Batch for confirmed L2PS */}
+                                {(tx.l1BatchHash || tx.l1_block_number) && (
+                                  <>
+                                    {tx.l1_block_number && (
+                                      <div className="tx-row">
+                                        <span className="tx-label">Confirmed in block <Hint text="The L1 block where this transaction's ZK proof was finalized" /></span>
+                                        <span className="tx-block">#{tx.l1_block_number}</span>
+                                      </div>
+                                    )}
+                                    {tx.l1BatchHash && (
+                                      <div className="tx-row">
+                                        <span className="tx-label">Batch proof <Hint text="ZK proof batch that includes this transaction. Multiple private txs are batched into one proof." /></span>
+                                        <div className="tx-value-group">
+                                          <span
+                                            className="tx-hash mini"
+                                            title={`Full batch hash: ${tx.l1BatchHash}\nClick to copy`}
+                                            onClick={(e) => { e.stopPropagation(); copyToClipboard(tx.l1BatchHash!, 'batch proof hash') }}
+                                          >
+                                            {tx.l1BatchHash?.slice(0, 12)}...
+                                          </span>
+                                          <button
+                                            className="copy-btn"
+                                            onClick={(e) => { e.stopPropagation(); copyToClipboard(tx.l1BatchHash!, 'batch proof hash') }}
+                                            title="Copy batch hash"
+                                          >
+                                            📋
+                                          </button>
+                                        </div>
+                                      </div>
+                                    )}
+                                  </>
+                                )}
+
                               </div>
-                            )}
+                            </details>
+
                           </div>
 
                           {/* Privacy Notice / Toggle Button */}
